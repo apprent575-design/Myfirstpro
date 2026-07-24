@@ -96,10 +96,18 @@ create table if not exists public.bookings (
   housekeeping_price numeric default 0,
   deposit_enabled boolean default false,
   deposit_amount numeric default 0,
+  security_deposit_enabled boolean default false,
+  security_deposit numeric default 0,
+  fee_type text default 'EXCLUSIVE',
   status text default 'Pending',
   payment_status text default 'Unpaid',
   notes text,
   tenant_rating_good boolean default true,
+  check_in_time text default '11:00',
+  check_out_time text default '09:00',
+  handler_enabled boolean default false,
+  handler_name text,
+  handler_phone text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -119,6 +127,7 @@ create table if not exists public.expenses (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,
   unit_id uuid references public.units(id) on delete cascade,
+  booking_id uuid references public.bookings(id) on delete set null,
   title text not null,
   category text,
   amount numeric default 0,

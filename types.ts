@@ -16,6 +16,12 @@ export enum PaymentStatus {
   UNPAID = 'Unpaid'
 }
 
+export enum FeeType {
+  EXCLUSIVE = 'EXCLUSIVE',
+  INCLUSIVE = 'INCLUSIVE',
+  TENANT_PAYS = 'TENANT_PAYS'
+}
+
 export interface Unit {
   id: string;
   user_id?: string; // Owner
@@ -40,17 +46,27 @@ export interface Booking {
   housekeeping_price: number;
   deposit_enabled: boolean;
   deposit_amount: number;
+  security_deposit_enabled?: boolean;
+  security_deposit?: number;
+  check_in_time?: string; // e.g. "14:00"
+  check_out_time?: string; // e.g. "12:00"
+  paid_amount: number; // New: Amount Paid (Down Payment / Deposit)
+  fee_type?: FeeType; // EXCLUSIVE, INCLUSIVE, TENANT_PAYS
   notes?: string;
   payment_status: PaymentStatus;
   status: BookingStatus;
   tenant_rating_good: boolean; // True = Welcome Again, False = Not Welcome
   created_at: string;
+  handler_enabled?: boolean;
+  handler_name?: string;
+  handler_phone?: string;
 }
 
 export interface Expense {
   id: string;
   user_id?: string; // Owner
   unit_id: string;
+  booking_id?: string; // New: Link to a specific booking
   title: string;
   category: string;
   amount: number;
@@ -87,5 +103,5 @@ export interface AppState {
   bookings: Booking[];
   expenses: Expense[];
   // Admin Data
-  allUsers: User[]; 
+  allUsers: User[];
 }

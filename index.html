@@ -1,147 +1,199 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sunlight Village Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/react-big-calendar@1.11.0/lib/css/react-big-calendar.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Cairo', 'sans-serif'],
-            },
-            colors: {
-              primary: {
-                50: '#eff6ff',
-                100: '#dbeafe',
-                200: '#bfdbfe',
-                300: '#93c5fd',
-                400: '#60a5fa',
-                500: '#3b82f6',
-                600: '#2563eb', // Matches the blue in screenshot
-                700: '#1d4ed8',
-                800: '#1e40af',
-                900: '#1e3a8a',
-                950: '#172554',
-              }
-            },
-            boxShadow: {
-                'card': '0 2px 5px rgba(0, 0, 0, 0.05)',
-                'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)'
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunlight Village Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/react-big-calendar@1.11.0/lib/css/react-big-calendar.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            primary: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              200: '#bfdbfe',
+              300: '#93c5fd',
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb', // Matches the blue in screenshot
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+              950: '#172554',
             }
           },
+          boxShadow: {
+            'card': '0 2px 5px rgba(0, 0, 0, 0.05)',
+            'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)'
+          }
         },
-      }
-    </script>
-    <style>
-      body {
-        background-color: #f1f5f9; /* Slate 100/200 mix */
-      }
-      
-      .dark body {
-        background-color: #0f172a;
-      }
+      },
+    }
+  </script>
+  <style>
+    body {
+      background-color: #f1f5f9;
+      /* Slate 100/200 mix */
+    }
 
-      /* Clean White Card Style (Replaces Glass) */
-      .glass {
-        background: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
-        border: 1px solid #f1f5f9;
-      }
-      
-      .dark .glass {
-        background: #1e293b;
-        border-color: #334155;
-        box-shadow: none;
-      }
+    .dark body {
+      background-color: #0f172a;
+    }
 
-      /* Calendar Styling */
-      .rbc-calendar { font-family: 'Cairo', sans-serif; }
-      
-      /* Month View Container */
-      .rbc-month-view {
-        border-radius: 16px;
-        overflow: hidden;
-        background: white;
-        border: 1px solid #e2e8f0 !important;
-      }
-      .dark .rbc-month-view {
-        background: #1e293b; /* Match card background */
-        border-color: #334155 !important;
-      }
+    /* Clean White Card Style (Replaces Glass) */
+    .glass {
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+      border: 1px solid #f1f5f9;
+    }
 
-      /* Header (Days of week) */
-      .rbc-header {
-        padding: 16px 0;
-        font-weight: 800;
-        color: #475569;
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0 !important;
-        text-transform: uppercase;
-        font-size: 0.85rem;
-      }
-      .dark .rbc-header {
-        color: #94a3b8;
-        background: #1e293b;
-        border-bottom-color: #334155 !important;
-      }
+    .dark .glass {
+      background: #1e293b;
+      border-color: #334155;
+      box-shadow: none;
+    }
 
-      /* Grid Lines - Increased contrast for dark mode */
-      .rbc-day-bg { border-left: 1px solid #e2e8f0 !important; }
-      .dark .rbc-day-bg { border-left: 1px solid #475569 !important; } /* Lighter border for visibility */
-      .rbc-month-row { border-bottom: 1px solid #e2e8f0 !important; }
-      .dark .rbc-month-row { border-bottom: 1px solid #475569 !important; }
+    /* Calendar Styling */
+    .rbc-calendar {
+      font-family: 'Cairo', sans-serif;
+    }
 
-      /* Off-Range (Dates from prev/next month) */
-      .rbc-off-range-bg {
-        background-color: #f8fafc !important; 
-      }
-      .dark .rbc-off-range-bg {
-        background-color: transparent !important; 
-      }
-      .dark .rbc-off-range .rbc-button-link {
-        color: #64748b; /* Solid slate-500, removed opacity to fix 'faded' look */
-        font-weight: 500;
-      }
+    /* Month View Container */
+    .rbc-month-view {
+      border-radius: 16px;
+      overflow: hidden;
+      background: white;
+      border: 1px solid #e2e8f0 !important;
+    }
 
-      /* Date Numbers */
-      .rbc-date-cell {
-        padding: 8px;
-        font-weight: 700;
-        font-size: 0.9rem;
-      }
-      .dark .rbc-date-cell .rbc-button-link {
-        color: #e2e8f0; /* Bright text for current month */
-      }
+    .dark .rbc-month-view {
+      background: #1e293b;
+      /* Match card background */
+      border-color: #334155 !important;
+    }
 
-      /* Today Cell */
-      .rbc-today { 
-        background-color: #eff6ff !important; 
-      }
-      .dark .rbc-today { 
-        background-color: rgba(59, 130, 246, 0.25) !important; /* Slightly more visible background */
-        border: 1px solid rgba(59, 130, 246, 0.5);
-      }
+    /* Header (Days of week) */
+    .rbc-header {
+      padding: 16px 0;
+      font-weight: 800;
+      color: #475569;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0 !important;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+    }
 
-      /* Event Bars */
-      .rbc-event {
-        border-radius: 6px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      }
-      
-      /* Hide Scrollbar util */
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
+    .dark .rbc-header {
+      color: #94a3b8;
+      background: #1e293b;
+      border-bottom-color: #334155 !important;
+    }
+
+    /* Grid Lines - Increased contrast for dark mode */
+    .rbc-day-bg {
+      border-left: 1px solid #e2e8f0 !important;
+    }
+
+    .dark .rbc-day-bg {
+      border-left: 1px solid #475569 !important;
+    }
+
+    /* Lighter border for visibility */
+    .rbc-month-row {
+      border-bottom: 1px solid #e2e8f0 !important;
+    }
+
+    .dark .rbc-month-row {
+      border-bottom: 1px solid #475569 !important;
+    }
+
+    /* Off-Range (Dates from prev/next month) */
+    .rbc-off-range-bg {
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
+
+    .rbc-month-row .rbc-off-range {
+      pointer-events: none !important;
+    }
+
+    .rbc-off-range .rbc-button-link {
+      display: none !important;
+    }
+
+    .rbc-off-range .rbc-event {
+      display: none !important;
+    }
+
+    /* Date Numbers */
+    .rbc-date-cell {
+      padding: 8px;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .dark .rbc-date-cell .rbc-button-link {
+      color: #e2e8f0;
+      /* Bright text for current month */
+    }
+
+    /* Today Cell */
+    .rbc-today {
+      background-color: #eff6ff !important;
+    }
+
+    .dark .rbc-today {
+      background-color: rgba(59, 130, 246, 0.25) !important;
+      /* Slightly more visible background */
+      border: 1px solid rgba(59, 130, 246, 0.5);
+    }
+
+    /* Event Bars */
+    .rbc-event {
+      border-radius: 6px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Force tall calendar rows and disable internal clipping */
+    .rbc-month-row {
+      min-height: 140px !important;
+      overflow: visible !important;
+    }
+
+    .rbc-row-content {
+      overflow: visible !important;
+      z-index: 10;
+    }
+
+    .rbc-show-more {
+      display: block !important;
+      color: #3b82f6 !important;
+      font-weight: bold;
+    }
+
+    /* Hide Scrollbar util */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -162,10 +214,13 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="text-gray-800 dark:text-gray-100 transition-colors duration-200 antialiased bg-slate-100 dark:bg-slate-900">
-    <div id="root"></div>
+
+<body
+  class="text-gray-800 dark:text-gray-100 transition-colors duration-200 antialiased bg-slate-100 dark:bg-slate-900">
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>
