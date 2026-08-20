@@ -64,6 +64,8 @@ create table if not exists public.units (
   user_id uuid references public.profiles(id) on delete cascade not null,
   name text not null,
   type text not null, 
+  village_name_ar text,
+  village_name_en text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -96,10 +98,18 @@ create table if not exists public.bookings (
   housekeeping_price numeric default 0,
   deposit_enabled boolean default false,
   deposit_amount numeric default 0,
+  security_deposit_enabled boolean default false,
+  security_deposit numeric default 0,
+  fee_type text default 'EXCLUSIVE',
   status text default 'Pending',
   payment_status text default 'Unpaid',
   notes text,
   tenant_rating_good boolean default true,
+  check_in_time text default '11:00',
+  check_out_time text default '09:00',
+  handler_enabled boolean default false,
+  handler_name text,
+  handler_phone text,
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -119,6 +129,7 @@ create table if not exists public.expenses (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,
   unit_id uuid references public.units(id) on delete cascade,
+  booking_id uuid references public.bookings(id) on delete set null,
   title text not null,
   category text,
   amount numeric default 0,
@@ -196,3 +207,21 @@ end; $$;
 
 -- 9. SET REPLICA IDENTITY (Critical for DELETE events)
 alter table public.subscriptions replica identity full;
+
+-- 10. System Settings Table
+create table if not exists public.system_settings (
+  id text primary key default 'global',
+  daily_email_time text default '09:00',
+  last_email_sent_date text,
+  emailjs_service_id text,
+  emailjs_template_id text,
+  emailjs_public_key text
+);
+
+alter table public.system_settings enable row level security;
+drop policy if exists "Admins can manage system_settings" on public.system_settings;
+create policy "Admins can manage system_settings" on public.system_settings for all using (
+  exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+);
+
+insert into public.system_settings (id) values ('global') on conflict (id) do nothing;

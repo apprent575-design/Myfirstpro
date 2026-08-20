@@ -5,13 +5,18 @@ import { Moon, Sun, Globe, Shield, User, Check, AlertCircle, Loader2, CreditCard
 import { format, addDays } from 'date-fns';
 
 export const Settings = () => {
-  const { t, theme, toggleTheme, language, setLanguage, updatePassword, user, hasValidSubscription, daysRemaining, isAdmin, dateSettings, setDateSettings, formatDate } = useApp();
+  const { t, theme, toggleTheme, language, setLanguage, updatePassword, updateProfile, user, hasValidSubscription, daysRemaining, isAdmin, dateSettings, setDateSettings, formatDate } = useApp();
   
   // Password Change State
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
   const [passMessage, setPassMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // Partner Email State
+  const [partnerEmail, setPartnerEmail] = useState(user?.partner_email || '');
+  const [isSavingPartner, setIsSavingPartner] = useState(false);
+  const [partnerMessage, setPartnerMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Subscription Info
   const sub = user?.subscription;
@@ -43,6 +48,21 @@ export const Settings = () => {
         setPassMessage({ type: 'error', text: error.message || 'Failed to update password' });
     } finally {
         setIsChangingPass(false);
+    }
+  };
+
+  const handlePartnerEmailSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPartnerMessage(null);
+    setIsSavingPartner(true);
+    try {
+        await updateProfile({ partner_email: partnerEmail });
+        setPartnerMessage({ type: 'success', text: language === 'ar' ? 'تم الحفظ بنجاح' : 'Saved successfully' });
+        setTimeout(() => setPartnerMessage(null), 3000);
+    } catch (error: any) {
+        setPartnerMessage({ type: 'error', text: error.message || 'Failed to update partner email' });
+    } finally {
+        setIsSavingPartner(false);
     }
   };
 
@@ -246,6 +266,47 @@ export const Settings = () => {
                     </button>
                 </div>
              </div>
+        </div>
+
+        {/* Partner Settings */}
+        <div className="glass p-8 rounded-3xl flex flex-col justify-center space-y-6">
+            <div className="flex items-start gap-4 mb-2">
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
+                    <User size={24} />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white">{language === 'ar' ? 'إيميل الشريك' : 'Partner Email'}</h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{language === 'ar' ? 'سيتم إرسال نسخة من إشعارات الحجوزات إلى هذا البريد' : 'Booking notifications will be CC\'d to this email'}</p>
+                </div>
+            </div>
+
+            <form onSubmit={handlePartnerEmailSave} className="space-y-4 relative z-10 w-full">
+                <div className="space-y-2">
+                    <input 
+                        type="email" 
+                        className="w-full p-4 rounded-2xl border bg-white/60 dark:bg-slate-900/60 border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-primary-500 transition-all backdrop-blur-sm"
+                        placeholder="partner@example.com"
+                        value={partnerEmail}
+                        onChange={(e) => setPartnerEmail(e.target.value)}
+                    />
+                </div>
+
+                {partnerMessage && (
+                    <div className={`p-3 rounded-xl flex items-center gap-2 text-sm font-medium ${partnerMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {partnerMessage.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
+                        {partnerMessage.text}
+                    </div>
+                )}
+
+                <button 
+                    type="submit" 
+                    disabled={isSavingPartner}
+                    className="bg-primary-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-primary-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 w-full sm:w-auto"
+                >
+                    {isSavingPartner ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                    {language === 'ar' ? 'حفظ' : 'Save'}
+                </button>
+            </form>
         </div>
 
         {/* Security / Change Password - Full Width */}
