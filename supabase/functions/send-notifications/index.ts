@@ -3,7 +3,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 import nodemailer from "npm:nodemailer@6.9.13";
 
 // Anti-Spam, Clean & Professional HTML Email Template
-const buildEmailTemplate = (title: string, headerColor: string, booking: any, unitName: string) => {
+interface CheckoutExtras {
+    expenses: any[];
+    bookingProfit: number;
+    totalExpenses: number;
+    netProfit: number;
+}
+
+const buildEmailTemplate = (title: string, headerColor: string, booking: any, unitName: string, checkoutExtras?: CheckoutExtras | null) => {
     const isPaid = booking.payment_status === 'Paid';
     const totalRental = booking.total_rental_price || 0;
     const paidAmount = isPaid ? totalRental : (booking.deposit_enabled ? (booking.deposit_amount || 0) : 0);
@@ -34,6 +41,45 @@ const buildEmailTemplate = (title: string, headerColor: string, booking: any, un
         : '<span style="color: #b91c1c; font-weight: bold; background-color: #fee2e2; padding: 4px 12px; border-radius: 20px; font-size: 13px;">مقدم فقط / مستحق الدفع</span>';
 
     const hasNotes = booking.notes && booking.notes.trim() !== '';
+
+    // Checkout-only section: linked expenses + booking net profit
+    let checkoutSectionHtml = '';
+    if (checkoutExtras) {
+        const expenseRows = checkoutExtras.expenses.length > 0
+            ? checkoutExtras.expenses.map((e: any) => `
+                                <tr>
+                                    <td style="color: #718096; width: 35%; border-bottom: 1px solid #f7fafc;">${e.title || 'مصروف'} <br><span style="font-size: 12px; color: #a0aec0; font-weight: normal;">(${e.category || 'غير مصنف'})</span></td>
+                                    <td style="color: #1a202c; font-weight: 600; text-align: left; border-bottom: 1px solid #f7fafc;">${(e.amount || 0).toLocaleString()} ج.م <br><span style="font-size: 12px; color: #a0aec0; font-weight: normal;">${e.date || ''}</span></td>
+                                </tr>`).join('')
+            : `
+                                <tr>
+                                    <td colspan="2" style="color: #a0aec0; font-weight: normal; border-bottom: 1px solid #f7fafc; text-align: center; padding: 16px 12px;">لا توجد مصروفات مرتبطة بهذا الحجز</td>
+                                </tr>`;
+
+        const netColor = checkoutExtras.netProfit >= 0 ? '#047857' : '#e53e3e';
+
+        checkoutSectionHtml = `
+                            <!-- Checkout Expenses & Net Profit -->
+                            <h3 style="margin: 40px 0 20px 0; color: #1a202c; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #edf2f7; padding-bottom: 10px;">
+                                المصروفات وصافي الربح
+                            </h3>
+                            
+                            <table width="100%" cellpadding="12" cellspacing="0" border="0" style="font-size: 15px;">
+                                ${expenseRows}
+                                <tr>
+                                    <td style="color: #718096; padding-top: 20px; border-bottom: 1px solid #f7fafc;">ربح الحجز (قبل المصروفات)</td>
+                                    <td style="color: #1a202c; font-weight: 700; text-align: left; padding-top: 20px; border-bottom: 1px solid #f7fafc;">${checkoutExtras.bookingProfit.toLocaleString()} ج.م</td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #718096; border-bottom: 1px solid #f7fafc;">إجمالي المصروفات المرتبطة بالحجز</td>
+                                    <td style="color: #b91c1c; font-weight: 700; text-align: left; border-bottom: 1px solid #f7fafc;">${checkoutExtras.totalExpenses.toLocaleString()} ج.م</td>
+                                </tr>
+                                <tr>
+                                    <td style="color: #1a202c; font-weight: 800; font-size: 18px; padding-top: 25px;">صافي الربح الإجمالي</td>
+                                    <td style="color: ${netColor}; font-weight: 800; font-size: 18px; text-align: left; padding-top: 25px;">${checkoutExtras.netProfit.toLocaleString()} ج.م</td>
+                                </tr>
+                            </table>`;
+    }
 
     return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -148,6 +194,8 @@ const buildEmailTemplate = (title: string, headerColor: string, booking: any, un
                                 </tr>
                             </table>
 
+                            ${checkoutSectionHtml}
+
                         </td>
                     </tr>
 
@@ -227,6 +275,13 @@ serve(async (req) => {
             return new Response(JSON.stringify({ msg: "No bookings for tomorrow" }), { headers: { "Content-Type": "application/json" } });
         }
 
+        // Fetch expenses linked to these bookings (for the checkout email net profit)
+        const bookingIds = bookings.map((b: any) => b.id);
+        const { data: linkedExpenses } = await supabase
+            .from('expenses')
+            .select('id, booking_id, title, category, amount, date')
+            .in('booking_id', bookingIds);
+
 
         const userIds = [...new Set(bookings.map((b: any) => b.user_id))];
         const promises: Promise<any>[] = [];
@@ -252,14 +307,29 @@ serve(async (req) => {
                 let subject = "";
                 let html = "";
 
+                // Booking profit per fee type (same formula as the financial report):
+                // INCLUSIVE -> (nightly rate - village fee) x nights; otherwise nightly rate x nights
+                const bookingProfit = booking.fee_type === 'INCLUSIVE'
+                    ? ((booking.nightly_rate || 0) - (booking.village_fee || 0)) * (booking.nights || 0)
+                    : (booking.nightly_rate || 0) * (booking.nights || 0);
+
                 if (isCheckIn) {
                     subject = `تذكير بموعد دخول غداً: وحدة ${unitName} - Rental Manager`;
                     html = buildEmailTemplate("دخول عميل (Check-in)", "#2563eb", booking, unitName);
                 }
 
                 if (isCheckOut) {
+                    const bookingExpenses = (linkedExpenses || []).filter((e: any) => e.booking_id === booking.id);
+                    const totalExpenses = bookingExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+                    const netProfit = bookingProfit - totalExpenses;
+
                     subject = `تذكير بموعد مغادرة غداً: وحدة ${unitName} - Rental Manager`;
-                    html = buildEmailTemplate("مغادرة عميل (Check-out)", "#d97706", booking, unitName);
+                    html = buildEmailTemplate("مغادرة عميل (Check-out)", "#d97706", booking, unitName, {
+                        expenses: bookingExpenses,
+                        bookingProfit,
+                        totalExpenses,
+                        netProfit
+                    });
                 }
 
                 if (subject && html) {

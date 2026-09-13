@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext';
 import { FilterPopover } from './FilterPopover';
 import { MultiSelectBookings } from './MultiSelectBookings';
 import { MultiSelectUnits } from './MultiSelectUnits';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, List, Clock, CheckCircle, XCircle, X, User, Phone, Home, DollarSign, MessageCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, CalendarCheck, List, Clock, CheckCircle, XCircle, X, User, Phone, Home, DollarSign, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Booking, BookingStatus } from '../types';
 
@@ -111,7 +111,7 @@ const computeAvailability = (bookings: Booking[], monthDate: Date): Availability
 };
 
 // Custom Toolbar Component
-const CustomToolbar = ({ onNavigate, onView, date, view, availability }: ToolbarProps & { availability?: AvailabilitySegment[] }) => {
+const CustomToolbar = ({ onNavigate, onView, date, view }: ToolbarProps) => {
   const { t, isRTL, formatHeaderDate, language } = useApp();
   const navigate = useNavigate();
 
@@ -135,27 +135,9 @@ const CustomToolbar = ({ onNavigate, onView, date, view, availability }: Toolbar
         </button>
       </div>
 
-      {/* Center: Title + Availability */}
+      {/* Center: Title */}
       <div className="text-center order-1 md:order-2">
         <h2 className="text-2xl font-black text-gray-800 dark:text-white font-sans capitalize tracking-tight drop-shadow-sm">{label}</h2>
-        {availability && availability.length > 0 && (
-          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
-            {availability.map((seg, i) => (
-              <span
-                key={i}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                  seg.available
-                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                    : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                }`}
-              >
-                {language === 'ar'
-                  ? `من ${seg.from} إلى ${seg.to} ${seg.available ? 'متاح' : 'غير متاح'}`
-                  : `${seg.from}–${seg.to} ${seg.available ? 'Available' : 'Unavailable'}`}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Right: Actions */}
@@ -173,6 +155,12 @@ const CustomToolbar = ({ onNavigate, onView, date, view, availability }: Toolbar
           >
             <List size={16} /> <span>Agenda</span>
           </button>
+          <button
+            onClick={() => onView('availability' as any)}
+            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${view === ('availability' as any) ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+          >
+            <CalendarCheck size={16} /> <span>{language === 'ar' ? 'الأيام المتاحة' : 'Availability'}</span>
+          </button>
         </div>
 
         <button
@@ -188,8 +176,8 @@ const CustomToolbar = ({ onNavigate, onView, date, view, availability }: Toolbar
 };
 
 export const CalendarView = () => {
-  const { t, state, isRTL, dateSettings, formatDate, language } = useApp();
-  const [view, setView] = useState<View>('month');
+  const { t, state, isRTL, dateSettings, formatDate, language, dateLocale } = useApp();
+  const [view, setView] = useState<View | 'availability'>('month');
   const [date, setDate] = useState(startOfMonth(new Date()));
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [filterUnitIds, setFilterUnitIds] = useState<string[]>([]);
@@ -209,6 +197,58 @@ export const CalendarView = () => {
       date
     ),
     [state.bookings, filterBookingIds, filterUnitIds, date]
+  );
+
+  const availableDays = availability.filter(s => s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
+  const unavailableDays = availability.filter(s => !s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
+
+  // Full-height panel for the "Availability" tab: vertical list of the month's day ranges
+  const AvailabilityPanel = () => (
+    <div className="h-full overflow-y-auto p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <h3 className="text-lg font-black text-gray-800 dark:text-white capitalize">
+          {format(date, 'MMMM yyyy', { locale: dateLocale })}
+        </h3>
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            {language === 'ar' ? `${availableDays} يوم متاح` : `${availableDays} days available`}
+          </span>
+          <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+            {language === 'ar' ? `${unavailableDays} يوم غير متاح` : `${unavailableDays} days unavailable`}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {availability.map((seg, i) => (
+          <div
+            key={i}
+            className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border transition-all ${
+              seg.available
+                ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200/70 dark:border-emerald-800/60'
+                : 'bg-rose-50/70 dark:bg-rose-900/20 border-rose-200/70 dark:border-rose-800/60'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className={`w-9 h-9 flex items-center justify-center rounded-xl font-black text-sm ${seg.available ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30' : 'bg-rose-500 text-white shadow shadow-rose-500/30'}`}>
+                {seg.available ? '✓' : '✕'}
+              </span>
+              <span className="font-bold text-gray-800 dark:text-white text-sm md:text-base">
+                {language === 'ar'
+                  ? `من يوم ${seg.from} إلى يوم ${seg.to}`
+                  : `Day ${seg.from} to day ${seg.to}`}
+              </span>
+            </div>
+            <span className={`px-3.5 py-1.5 rounded-full text-xs font-black ${
+              seg.available
+                ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30'
+                : 'bg-rose-500 text-white shadow shadow-rose-500/30'
+            }`}>
+              {seg.available ? (language === 'ar' ? 'متاح' : 'Available') : (language === 'ar' ? 'غير متاح' : 'Unavailable')}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 
   const events = state.bookings
@@ -353,17 +393,17 @@ export const CalendarView = () => {
           culture={calendarCulture}
           messages={messages}
           components={{
-            toolbar: (props: ToolbarProps) => <CustomToolbar {...props} availability={availability} />,
+            toolbar: CustomToolbar,
             event: CustomEvent
           }}
-          view={view}
-          onView={setView}
+          view={view as View}
+          onView={((v: string) => setView(v as View | 'availability')) as any}
           date={date}
           onNavigate={onNavigate}
           length={35}
           eventPropGetter={eventPropGetter}
           onSelectEvent={handleSelectEvent}
-          views={['month', 'agenda']}
+          views={{ month: true, agenda: true, availability: AvailabilityPanel } as any}
           popup
           className="font-sans h-full text-gray-700 dark:text-gray-200"
         />
