@@ -142,30 +142,30 @@ const CustomToolbar = ({ onNavigate, onView, date, view }: ToolbarProps) => {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-3 order-3 w-full md:w-auto">
-        <div className="flex bg-gray-100 dark:bg-slate-700/80 p-1 rounded-xl flex-1 md:flex-none">
+        <div className="flex flex-wrap justify-center bg-gray-100 dark:bg-slate-700/80 p-1 rounded-xl flex-1 md:flex-none">
           <button
             onClick={() => onView('month')}
-            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${view === 'month' ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+            className={`flex-1 md:flex-none px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${view === 'month' ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
           >
-            <CalendarIcon size={16} /> <span>Month</span>
+            <CalendarIcon size={15} /> <span>Month</span>
           </button>
           <button
             onClick={() => onView('agenda')}
-            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${view === 'agenda' ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+            className={`flex-1 md:flex-none px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${view === 'agenda' ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
           >
-            <List size={16} /> <span>Agenda</span>
+            <List size={15} /> <span>Agenda</span>
           </button>
           <button
             onClick={() => onView('availability' as any)}
-            className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all ${view === ('availability' as any) ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+            className={`flex-1 md:flex-none px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${view === ('availability' as any) ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
           >
-            <CalendarCheck size={16} /> <span>{language === 'ar' ? 'الأيام المتاحة' : 'Availability'}</span>
+            <CalendarCheck size={15} /> <span>{language === 'ar' ? 'الأيام المتاحة' : 'Availability'}</span>
           </button>
         </div>
 
         <button
           onClick={() => navigate('/bookings')}
-          className="bg-primary-600 hover:bg-primary-700 text-white p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary-600/30 active:scale-95"
+          className="shrink-0 bg-primary-600 hover:bg-primary-700 text-white p-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary-600/30 active:scale-95"
           title={t('addBooking')}
         >
           <Plus size={20} strokeWidth={2.5} />
@@ -177,7 +177,7 @@ const CustomToolbar = ({ onNavigate, onView, date, view }: ToolbarProps) => {
 
 export const CalendarView = () => {
   const { t, state, isRTL, dateSettings, formatDate, language, dateLocale } = useApp();
-  const [view, setView] = useState<View | 'availability'>('month');
+  const [view, setView] = useState<View>('month');
   const [date, setDate] = useState(startOfMonth(new Date()));
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [filterUnitIds, setFilterUnitIds] = useState<string[]>([]);
@@ -204,7 +204,7 @@ export const CalendarView = () => {
 
   // Full-height panel for the "Availability" tab: vertical list of the month's day ranges
   const AvailabilityPanel = () => (
-    <div className="h-full overflow-y-auto p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5">
+    <div className="min-h-[900px] overflow-y-auto p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h3 className="text-lg font-black text-gray-800 dark:text-white capitalize">
           {format(date, 'MMMM yyyy', { locale: dateLocale })}
@@ -250,6 +250,12 @@ export const CalendarView = () => {
       </div>
     </div>
   );
+
+  // react-big-calendar requires static .title and .navigate on every registered view
+  // (Calendar.js calls View.title on render; utils/move.js requires .navigate for PREV/NEXT).
+  (AvailabilityPanel as any).title = () => '';
+  (AvailabilityPanel as any).navigate = (d: Date, action: string) =>
+    action === 'NEXT' ? addMonths(d, 1) : action === 'PREV' ? addMonths(d, -1) : d;
 
   const events = state.bookings
     .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
@@ -396,8 +402,8 @@ export const CalendarView = () => {
             toolbar: CustomToolbar,
             event: CustomEvent
           }}
-          view={view as View}
-          onView={((v: string) => setView(v as View | 'availability')) as any}
+          view={view}
+          onView={setView}
           date={date}
           onNavigate={onNavigate}
           length={35}
