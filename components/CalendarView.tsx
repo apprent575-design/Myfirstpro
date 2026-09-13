@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer, ToolbarProps, View, EventProps } from 'react-big-calendar';
 import { format, getDay, addDays, addMonths, endOfMonth, isValid, isWithinInterval } from 'date-fns';
 import { enUS, arSA } from 'date-fns/locale';
@@ -67,9 +67,52 @@ const CustomEvent = ({ event }: EventProps<any>) => {
   );
 };
 
+// Availability segments for the displayed month: continuous day ranges marked available/unavailable
+interface AvailabilitySegment {
+  from: number; // day of month (1-based)
+  to: number;
+  available: boolean;
+}
+
+const computeAvailability = (bookings: Booking[], monthDate: Date): AvailabilitySegment[] => {
+  const mStart = startOfMonth(monthDate);
+  const mEnd = endOfMonth(monthDate);
+  const daysInMonth = mEnd.getDate();
+  const booked = new Array<boolean>(daysInMonth + 1).fill(false);
+
+  bookings.forEach(b => {
+    if (b.status === BookingStatus.CANCELLED) return;
+    const s = new Date(`${b.start_date}T00:00:00`);
+    const e = new Date(`${b.end_date}T00:00:00`);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
+    // Occupied nights run from check-in until the day before checkout (checkout day stays available)
+    const lastNight = new Date(e);
+    lastNight.setDate(lastNight.getDate() - 1);
+    const from = Math.max(s.getTime(), mStart.getTime());
+    const to = Math.min(lastNight.getTime(), mEnd.getTime());
+    if (to < from) return;
+    const fromDay = new Date(from).getDate();
+    const toDay = new Date(to).getDate();
+    for (let d = fromDay; d <= toDay; d++) booked[d] = true;
+  });
+
+  const segments: AvailabilitySegment[] = [];
+  let cur: AvailabilitySegment | null = null;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const available = !booked[d];
+    if (cur && cur.available === available) {
+      cur.to = d;
+    } else {
+      cur = { from: d, to: d, available };
+      segments.push(cur);
+    }
+  }
+  return segments;
+};
+
 // Custom Toolbar Component
-const CustomToolbar = ({ onNavigate, onView, date, view }: ToolbarProps) => {
-  const { t, isRTL, formatHeaderDate } = useApp();
+const CustomToolbar = ({ onNavigate, onView, date, view, availability }: ToolbarProps & { availability?: AvailabilitySegment[] }) => {
+  const { t, isRTL, formatHeaderDate, language } = useApp();
   const navigate = useNavigate();
 
   // Use the new centralized date formatting
@@ -92,9 +135,27 @@ const CustomToolbar = ({ onNavigate, onView, date, view }: ToolbarProps) => {
         </button>
       </div>
 
-      {/* Center: Title */}
+      {/* Center: Title + Availability */}
       <div className="text-center order-1 md:order-2">
         <h2 className="text-2xl font-black text-gray-800 dark:text-white font-sans capitalize tracking-tight drop-shadow-sm">{label}</h2>
+        {availability && availability.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+            {availability.map((seg, i) => (
+              <span
+                key={i}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                  seg.available
+                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                }`}
+              >
+                {language === 'ar'
+                  ? `من ${seg.from} إلى ${seg.to} ${seg.available ? 'متاح' : 'غير متاح'}`
+                  : `${seg.from}–${seg.to} ${seg.available ? 'Available' : 'Unavailable'}`}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Right: Actions */}
@@ -138,6 +199,17 @@ export const CalendarView = () => {
 
   const monthStart = startOfMonth(date);
   const nextMonthStart = startOfMonth(addMonths(date, 1));
+
+  // Availability segments (available/unavailable day ranges) for the currently displayed month
+  const availability = useMemo(
+    () => computeAvailability(
+      state.bookings
+        .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
+        .filter(b => filterUnitIds.length === 0 || filterUnitIds.includes(b.unit_id)),
+      date
+    ),
+    [state.bookings, filterBookingIds, filterUnitIds, date]
+  );
 
   const events = state.bookings
     .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
@@ -281,7 +353,7 @@ export const CalendarView = () => {
           culture={calendarCulture}
           messages={messages}
           components={{
-            toolbar: CustomToolbar,
+            toolbar: (props: ToolbarProps) => <CustomToolbar {...props} availability={availability} />,
             event: CustomEvent
           }}
           view={view}

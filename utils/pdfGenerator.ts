@@ -433,6 +433,7 @@ export const generateOccupancyReport = async (
         status: 'الحالة',
         payment: 'الدفع',
         unitTotal: 'ملخص الوحدة',
+        unitTotalInclUnlinked: 'الإجمالي شامل الرسوم غير المرتبطة بحجوزات',
         footer: 'تقرير الإشغال'
     } : {
         title: 'Detailed Occupancy Report',
@@ -458,6 +459,7 @@ export const generateOccupancyReport = async (
         status: 'Status',
         payment: 'Payment',
         unitTotal: 'Unit Summary',
+        unitTotalInclUnlinked: 'Total incl. expenses not linked to bookings',
         footer: 'Occupancy Report'
     };
 
@@ -575,6 +577,37 @@ export const generateOccupancyReport = async (
             </tr>
         `;
 
+            // Expenses not linked to any booking for this unit (within the report period)
+            const unitUnlinkedExpenses = expenses.filter(e => {
+                if (e.unit_id !== u.id || e.booking_id) return false;
+                if (filterStart && filterEnd) {
+                    const eDate = parseISO(e.date);
+                    const rangeStart = startOfDay(parseISO(filterStart));
+                    const rangeEnd = endOfDay(parseISO(filterEnd));
+                    return isWithinInterval(eDate, { start: rangeStart, end: rangeEnd });
+                }
+                return true;
+            });
+            const unlinkedTotal = unitUnlinkedExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+            const summaryRowInclUnlinked = `
+            <tr style="background-color: #fffbeb; border-top: 1px dashed #cbd5e1; font-weight: bold;">
+                <td colspan="3" style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">${labels.unitTotalInclUnlinked}</td>
+                <td style="padding: 12px; text-align: center; color: #92400e; font-weight: 800;">${unitTotalNights}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">-</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e; font-weight: bold;">${unitTotalRent.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">${unitFees.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">${unitHK.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">${unitSecDep.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #b45309; font-weight: 800;">${(unitExpenses + unlinkedTotal).toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e; background-color: #fef3c7;">${unitGrand.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #92400e;">${unitRemaining.toLocaleString()}</td>
+                <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; color: #b45309; font-weight: 800;">${(unitNetProfit - unlinkedTotal).toLocaleString()}</td>
+                <td></td>
+                <td></td>
+            </tr>
+        `;
+
             villageHtml += `
             <div style="margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; page-break-inside: avoid;">
                 <div style="background: #e0f2fe; padding: 12px 20px; border-bottom: 1px solid #bae6fd; display: flex; justify-content: space-between; align-items: center;">
@@ -604,6 +637,7 @@ export const generateOccupancyReport = async (
                     <tbody>
                         ${bookingRows}
                         ${summaryRow}
+                        ${summaryRowInclUnlinked}
                     </tbody>
                 </table>
             </div>
@@ -1111,13 +1145,26 @@ export const generateFinancialReport = async (
         return true;
     });
 
+    // Owner profit per booking based on fee type:
+    // TENANT_PAYS / EXCLUSIVE -> base nightly rate as written; INCLUSIVE -> nightly rate minus daily village fee
+    const bookingProfitOf = (b: Booking) => {
+        const nightly = b.fee_type === FeeType.INCLUSIVE
+            ? (b.nightly_rate || 0) - (b.village_fee || 0)
+            : (b.nightly_rate || 0);
+        return nightly * (b.nights || 0);
+    };
+
+    const confirmedBookings = filteredBookings.filter(b => b.status === BookingStatus.CONFIRMED);
+
     // Global Calculations based on filtered data
-    const totalRevenue = filteredBookings
-        .filter(b => b.status === BookingStatus.CONFIRMED)
+    const totalRevenue = confirmedBookings
         .reduce((sum, b) => sum + (b.payment_status === 'Paid' ? b.total_rental_price : (b.deposit_enabled ? b.deposit_amount : 0)), 0);
 
+    // Bookings profit (per fee type formula) summed over all bookings
+    const totalBookingsProfit = confirmedBookings.reduce((sum, b) => sum + bookingProfitOf(b), 0);
+
     const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const netProfit = totalRevenue - totalExpenses;
+    const netProfit = totalBookingsProfit - totalExpenses;
 
     const labels = isRTL ? {
         title: 'الملخص المالي',
@@ -1126,12 +1173,12 @@ export const generateFinancialReport = async (
         reportPeriod: 'فترة التقرير',
         summary: 'ملخص عام',
         revenue: 'إجمالي الإيرادات',
+        bookingsProfit: 'ربح الحجوزات',
         expenses: 'إجمالي المصروفات',
         netProfit: 'صافي الربح',
         details: 'تفاصيل حسب الوحدة',
         unit: 'الوحدة',
         bookings: 'حجوزات',
-        unitRev: 'إيراد',
         unitExp: 'مصروفات',
         unitNet: 'صافي',
         currency: 'ج.م',
@@ -1143,12 +1190,12 @@ export const generateFinancialReport = async (
         reportPeriod: 'Report Period',
         summary: 'Executive Summary',
         revenue: 'Total Revenue',
+        bookingsProfit: 'Bookings Profit',
         expenses: 'Total Expenses',
         netProfit: 'Net Profit',
         details: 'Details by Unit',
         unit: 'Unit',
         bookings: 'Bookings',
-        unitRev: 'Revenue',
         unitExp: 'Expenses',
         unitNet: 'Net',
         currency: 'EGP',
@@ -1157,12 +1204,12 @@ export const generateFinancialReport = async (
 
     const unitRows = displayedUnits.map(u => {
         const uBookings = filteredBookings.filter(b => b.unit_id === u.id && b.status === BookingStatus.CONFIRMED);
-        const uRev = uBookings.reduce((sum, b) => sum + (b.payment_status === 'Paid' ? b.total_rental_price : (b.deposit_enabled ? b.deposit_amount : 0)), 0);
+        const uProfit = uBookings.reduce((sum, b) => sum + bookingProfitOf(b), 0);
 
         const uExpenses = filteredExpenses.filter(e => e.unit_id === u.id);
         const uExpTotal = uExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-        const uNet = uRev - uExpTotal;
+        const uNet = uProfit - uExpTotal;
         const netColor = uNet >= 0 ? '#166534' : '#dc2626'; // Green for positive, Red for negative
         const netBg = uNet >= 0 ? '#dcfce7' : '#fee2e2';
 
@@ -1170,7 +1217,7 @@ export const generateFinancialReport = async (
          <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ffffff;">
             <td style="padding: 12px; font-weight: bold; color: #1e293b;">${u.name}</td>
             <td style="padding: 12px; text-align: center; color: #475569; font-weight: bold;">${uBookings.length}</td>
-            <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: bold; color: #0284c7;">${uRev.toLocaleString()}</td>
+            <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: bold; color: #0d9488;">${uProfit.toLocaleString()}</td>
             <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: bold; color: #d97706;">${uExpTotal.toLocaleString()}</td>
             <td style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'};">
                 <span style="font-weight: bold; color: ${netColor}; background: ${netBg}; padding: 4px 10px; border-radius: 6px; display: inline-block; min-width: 80px; text-align: center;">
@@ -1198,6 +1245,10 @@ export const generateFinancialReport = async (
                 <div style="font-size: 12px; color: #0369a1; font-weight: bold; text-transform: uppercase;">${labels.revenue}</div>
                 <div style="font-size: 24px; font-weight: 800; color: #0284c7; margin-top: 5px;">${totalRevenue.toLocaleString()} <span style="font-size: 14px;">${labels.currency}</span></div>
             </div>
+            <div style="flex: 1; background: #f0fdfa; padding: 20px; border-radius: 12px; border: 1px solid #99f6e4; text-align: center;">
+                <div style="font-size: 12px; color: #0f766e; font-weight: bold; text-transform: uppercase;">${labels.bookingsProfit}</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0d9488; margin-top: 5px;">${totalBookingsProfit.toLocaleString()} <span style="font-size: 14px;">${labels.currency}</span></div>
+            </div>
              <div style="flex: 1; background: #fff7ed; padding: 20px; border-radius: 12px; border: 1px solid #fed7aa; text-align: center;">
                 <div style="font-size: 12px; color: #c2410c; font-weight: bold; text-transform: uppercase;">${labels.expenses}</div>
                 <div style="font-size: 24px; font-weight: 800; color: #ea580c; margin-top: 5px;">${totalExpenses.toLocaleString()} <span style="font-size: 14px;">${labels.currency}</span></div>
@@ -1218,7 +1269,7 @@ export const generateFinancialReport = async (
                     <tr>
                         <th style="padding: 12px; text-align: ${isRTL ? 'right' : 'left'}; width: 25%; font-weight: 800;">${labels.unit}</th>
                         <th style="padding: 12px; text-align: center; width: 10%; font-weight: 800;">${labels.bookings}</th>
-                        <th style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; width: 20%; font-weight: 800;">${labels.unitRev}</th>
+                        <th style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; width: 20%; font-weight: 800;">${labels.bookingsProfit}</th>
                         <th style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; width: 20%; font-weight: 800;">${labels.unitExp}</th>
                         <th style="padding: 12px; text-align: ${isRTL ? 'left' : 'right'}; width: 25%; background-color: #f8fafc; font-weight: 800;">${labels.unitNet}</th>
                     </tr>
