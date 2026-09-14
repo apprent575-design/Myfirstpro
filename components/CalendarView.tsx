@@ -52,17 +52,17 @@ const localizer = dateFnsLocalizer({
 const CustomEvent = ({ event }: EventProps<any>) => {
   const StatusIcon = () => {
     switch (event.status) {
-      case BookingStatus.CONFIRMED: return <CheckCircle size={13} strokeWidth={2.5} />;
-      case BookingStatus.PENDING: return <Clock size={13} strokeWidth={2.5} />;
-      case BookingStatus.CANCELLED: return <XCircle size={13} strokeWidth={2.5} />;
+      case BookingStatus.CONFIRMED: return <CheckCircle size={14} strokeWidth={2.5} />;
+      case BookingStatus.PENDING: return <Clock size={14} strokeWidth={2.5} />;
+      case BookingStatus.CANCELLED: return <XCircle size={14} strokeWidth={2.5} />;
       default: return null;
     }
   };
 
   return (
-    <div className="flex items-center h-full w-full px-0.5 gap-1 overflow-hidden" title={`${event.title} • ${event.desc}`}>
+    <div className="flex items-center h-full w-full px-1 gap-1 overflow-hidden" title={`${event.title} • ${event.desc}`}>
       <span className="shrink-0 opacity-90"><StatusIcon /></span>
-      <span className="font-bold text-[11px] truncate leading-none">{event.title} • {event.desc}</span>
+      <span className="font-bold text-[13px] truncate leading-tight">{event.title} • {event.desc}</span>
     </div>
   );
 };
@@ -309,7 +309,7 @@ export const CalendarView = () => {
 
   const eventPropGetter = (event: any) => {
     // Rely on react-big-calendar's own internal height definitions to prevent graphic slicing/clipping.
-    let className = 'shadow-sm border-l-4 transition-all hover:brightness-95 cursor-pointer rounded-r-md text-[11.5px] font-medium !p-0.5 ';
+    let className = 'shadow-sm border-l-4 transition-all hover:brightness-95 cursor-pointer rounded-r-md text-[13px] font-bold !p-1 ';
 
     switch (event.status) {
       case BookingStatus.CONFIRMED:
@@ -344,7 +344,7 @@ export const CalendarView = () => {
     : (dateSettings.language === 'ar' ? 'ar' : 'en-US');
 
   return (
-    <div className="h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)] p-4 md:p-6 glass rounded-[32px] flex flex-col overflow-y-auto bg-white/60 dark:bg-slate-900/60 border border-white/40 dark:border-white/5 relative shadow-soft">
+    <div className="h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)] p-4 md:p-6 glass rounded-[32px] flex flex-col overflow-hidden bg-white/60 dark:bg-slate-900/60 border border-white/40 dark:border-white/5 relative shadow-soft">
       <div className="w-full flex justify-end mb-4 z-10 px-2 lg:px-4">
         <FilterPopover>
           {/* Unit Filter */}
@@ -389,7 +389,7 @@ export const CalendarView = () => {
         </FilterPopover>
       </div>
 
-      <div className="min-h-[1050px] shrink-0 w-full mb-4 -mt-16">
+      <div className="flex-1 min-h-0 shrink-0 w-full mb-4">
         <BigCalendar
           localizer={localizer}
           events={events}

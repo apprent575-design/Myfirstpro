@@ -74,7 +74,9 @@
     /* Month View Container */
     .rbc-month-view {
       border-radius: 16px;
-      overflow: hidden;
+      /* Internal scroll: toolbar stays fixed, the month grid scrolls under a sticky weekday header */
+      overflow-y: auto !important;
+      overscroll-behavior: contain;
       background: white;
       border: 1px solid #e2e8f0 !important;
     }
@@ -142,7 +144,7 @@
     .rbc-date-cell {
       padding: 8px;
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: 1rem;
     }
 
     .dark .rbc-date-cell .rbc-button-link {
@@ -161,15 +163,17 @@
       border: 1px solid rgba(59, 130, 246, 0.5);
     }
 
-    /* Event Bars */
+    /* Event Bars — bigger, clearer booking labels */
     .rbc-event {
       border-radius: 6px;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      font-size: 13px;
+      line-height: 1.35;
     }
 
     /* Force tall calendar rows and disable internal clipping */
     .rbc-month-row {
-      min-height: 140px !important;
+      min-height: 175px !important;
       overflow: visible !important;
     }
 
@@ -178,10 +182,18 @@
       z-index: 10;
     }
 
+    /* Keep weekday names visible while the month grid scrolls */
+    .rbc-month-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+    }
+
     .rbc-show-more {
       display: block !important;
       color: #3b82f6 !important;
       font-weight: bold;
+      font-size: 13px;
     }
 
     /* Hide Scrollbar util */
