@@ -73,12 +73,11 @@
 
     /* Month View Container */
     .rbc-month-view {
-      border-radius: 16px;
-      /* Internal scroll: toolbar stays fixed, the month grid scrolls under a sticky weekday header */
-      overflow-y: auto !important;
-      overscroll-behavior: contain;
+      border-radius: 20px;
+      overflow: visible !important;
       background: white;
       border: 1px solid #e2e8f0 !important;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
     }
 
     .dark .rbc-month-view {
@@ -142,9 +141,9 @@
 
     /* Date Numbers */
     .rbc-date-cell {
-      padding: 8px;
-      font-weight: 700;
-      font-size: 1rem;
+      padding: 10px 14px !important;
+      font-weight: 800 !important;
+      font-size: 1.1rem !important;
     }
 
     .dark .rbc-date-cell .rbc-button-link {
@@ -163,17 +162,30 @@
       border: 1px solid rgba(59, 130, 246, 0.5);
     }
 
-    /* Event Bars — bigger, clearer booking labels */
+    /* Event Bars — bigger, taller, clearer booking labels */
     .rbc-event {
-      border-radius: 6px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-      font-size: 13px;
+      min-height: 38px !important;
+      height: 38px !important;
+      border-radius: 10px !important;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+      font-size: 13.5px !important;
       line-height: 1.35;
+      padding: 2px 6px !important;
+      margin-bottom: 5px !important;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .rbc-event:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+      z-index: 25 !important;
     }
 
     /* Force tall calendar rows and disable internal clipping */
     .rbc-month-row {
-      min-height: 175px !important;
+      min-height: 250px !important;
       overflow: visible !important;
     }
 

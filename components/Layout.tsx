@@ -160,8 +160,8 @@ export const Layout = ({ children }: { children?: React.ReactNode }) => {
           <div className="w-10" />
         </header>
 
-        <div className={`flex-1 overflow-y-auto scroll-smooth ${location.pathname.startsWith('/calendar') ? 'p-3 md:p-5' : 'p-4 md:p-8 lg:p-10'}`}>
-          <div className={`${location.pathname.startsWith('/calendar') ? 'max-w-[1900px]' : 'max-w-7xl'} mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500`}>
+        <div className={`flex-1 overflow-y-auto scroll-smooth ${location.pathname.startsWith('/calendar') ? 'p-2 md:p-4' : 'p-4 md:p-8 lg:p-10'}`}>
+          <div className={`${location.pathname.startsWith('/calendar') ? 'w-full' : 'max-w-7xl'} mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500`}>
             {children}
           </div>
         </div>

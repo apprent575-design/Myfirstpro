@@ -48,21 +48,38 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-// Custom Event Component for richer display
+// Custom Event Component for richer, highly legible display
 const CustomEvent = ({ event }: EventProps<any>) => {
+  const b = event.allData;
+
   const StatusIcon = () => {
     switch (event.status) {
-      case BookingStatus.CONFIRMED: return <CheckCircle size={14} strokeWidth={2.5} />;
-      case BookingStatus.PENDING: return <Clock size={14} strokeWidth={2.5} />;
-      case BookingStatus.CANCELLED: return <XCircle size={14} strokeWidth={2.5} />;
+      case BookingStatus.CONFIRMED: return <CheckCircle size={15} strokeWidth={2.5} className="shrink-0 text-white" />;
+      case BookingStatus.PENDING: return <Clock size={15} strokeWidth={2.5} className="shrink-0 text-slate-900" />;
+      case BookingStatus.CANCELLED: return <XCircle size={15} strokeWidth={2.5} className="shrink-0 text-white" />;
       default: return null;
     }
   };
 
   return (
-    <div className="flex items-center h-full w-full px-1 gap-1 overflow-hidden" title={`${event.title} • ${event.desc}`}>
-      <span className="shrink-0 opacity-90"><StatusIcon /></span>
-      <span className="font-bold text-[13px] truncate leading-tight">{event.title} • {event.desc}</span>
+    <div
+      className="flex items-center justify-between w-full h-full px-2 py-0.5 gap-2 overflow-hidden select-none"
+      title={`${event.title} • ${event.desc} (${b?.start_date} ➔ ${b?.end_date})`}
+    >
+      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+        <StatusIcon />
+        <span className="font-black text-xs md:text-[13.5px] truncate tracking-tight drop-shadow-sm">
+          {event.title}
+        </span>
+        <span className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded bg-black/20 dark:bg-black/35 backdrop-blur-sm">
+          {event.desc}
+        </span>
+      </div>
+      {b?.start_date && b?.end_date && (
+        <span className="text-[10px] font-bold opacity-85 shrink-0 hidden lg:inline-block bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded">
+          {b.start_date.slice(5)} ➔ {b.end_date.slice(5)}
+        </span>
+      )}
     </div>
   );
 };
@@ -202,9 +219,9 @@ export const CalendarView = () => {
   const availableDays = availability.filter(s => s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
   const unavailableDays = availability.filter(s => !s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
 
-  // Full-height panel for the "Availability" tab: vertical list of the month's day ranges
+  // Full panel for the "Availability" tab: vertical list of the month's day ranges
   const AvailabilityPanel = () => (
-    <div className="min-h-[900px] overflow-y-auto p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5">
+    <div className="w-full p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <h3 className="text-lg font-black text-gray-800 dark:text-white capitalize">
           {format(date, 'MMMM yyyy', { locale: dateLocale })}
@@ -257,39 +274,48 @@ export const CalendarView = () => {
   (AvailabilityPanel as any).navigate = (d: Date, action: string) =>
     action === 'NEXT' ? addMonths(d, 1) : action === 'PREV' ? addMonths(d, -1) : d;
 
-  const events = state.bookings
-    .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
-    .filter(b => filterUnitIds.length === 0 || filterUnitIds.includes(b.unit_id))
-    .map(b => {
-      // 1. Force parsing exactly at local 00:00:00 to avoid any UTC offset skew.
-      const start = new Date(`${b.start_date}T00:00:00`);
-      const end = new Date(`${b.end_date}T00:00:00`);
+  const events = useMemo(() => {
+    const list = state.bookings
+      .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
+      .filter(b => filterUnitIds.length === 0 || filterUnitIds.includes(b.unit_id))
+      .map(b => {
+        // 1. Force parsing exactly at local 00:00:00 to avoid any UTC offset skew.
+        const start = new Date(`${b.start_date}T00:00:00`);
+        const end = new Date(`${b.end_date}T00:00:00`);
 
-      // 2. Add precisely 1 calendar day to the END date.
-      // Since react-big-calendar treats allDay end dates as EXCLUSIVE,
-      // stopping exactly at 00:00:00 on the day AFTER checkout forces it to draw precisely 
-      // over the checkout day (allowing visual collision stacking) without spilling into an extra day.
-      end.setDate(end.getDate() + 1);
+        // 2. Add precisely 1 calendar day to the END date so react-big-calendar renders over the checkout day
+        end.setDate(end.getDate() + 1);
 
-      // Clamp visual boundaries to the strict month limits.
-      // E.g. If it started in June, cap the start visual bounds tightly at July 1st.
-      // This prevents the visual bar from bleeding across the out-of-range calendar gaps in Month Views.
-      const clampedStart = start < monthStart ? monthStart : start;
-      const clampedEnd = end > nextMonthStart ? nextMonthStart : end;
+        // Clamp visual boundaries to the strict month limits.
+        const clampedStart = start < monthStart ? monthStart : start;
+        const clampedEnd = end > nextMonthStart ? nextMonthStart : end;
 
-      return {
-        id: b.id,
-        title: b.tenant_name,
-        desc: state.units.find(u => u.id === b.unit_id)?.name || 'Unit',
-        start: clampedStart,
-        end: clampedEnd,
-        allDay: true,
-        status: b.status,
-        resource: b.unit_id,
-        allData: b
-      };
-    })
-    .filter(event => event.start < event.end); // Only keep events that functionally intersect the current target month
+        return {
+          id: b.id,
+          title: b.tenant_name,
+          desc: state.units.find(u => u.id === b.unit_id)?.name || 'Unit',
+          start: clampedStart,
+          end: clampedEnd,
+          allDay: true,
+          status: b.status,
+          resource: b.unit_id,
+          allData: b
+        };
+      })
+      .filter(event => event.start < event.end); // Only keep events that functionally intersect the current target month
+
+    // Explicitly sort events:
+    // If two bookings share a transition day:
+    // The one that started earlier (or ends today) is sorted first -> allocated to TOP LANE (Lane 0).
+    // The one that starts today is sorted second -> allocated to BOTTOM LANE (Lane 1).
+    list.sort((a, b) => {
+      const diffStart = a.start.getTime() - b.start.getTime();
+      if (diffStart !== 0) return diffStart;
+      return (b.end.getTime() - b.start.getTime()) - (a.end.getTime() - a.start.getTime());
+    });
+
+    return list;
+  }, [state.bookings, state.units, filterBookingIds, filterUnitIds, monthStart, nextMonthStart]);
 
   const messages = {
     allDay: 'All Day',
@@ -308,19 +334,17 @@ export const CalendarView = () => {
   };
 
   const eventPropGetter = (event: any) => {
-    // Rely on react-big-calendar's own internal height definitions to prevent graphic slicing/clipping.
-    let className = 'shadow-sm border-l-4 transition-all hover:brightness-95 cursor-pointer rounded-r-md text-[13px] font-bold !p-1 ';
+    let className = 'shadow-md border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 transition-all hover:brightness-105 cursor-pointer rounded-xl text-[13.5px] font-bold !p-0.5 ';
 
     switch (event.status) {
       case BookingStatus.CONFIRMED:
-        // Use standard blue-600 to match request
-        className += 'bg-blue-600 border-blue-800 text-white';
+        className += 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-900 text-white shadow-blue-500/20';
         break;
       case BookingStatus.PENDING:
-        className += 'bg-amber-400 border-amber-600 text-slate-900 font-bold';
+        className += 'bg-gradient-to-r from-amber-400 to-amber-500 border-amber-600 text-slate-950 font-bold shadow-amber-500/20';
         break;
       case BookingStatus.CANCELLED:
-        className += 'bg-rose-500 border-rose-700 text-white opacity-60 decoration-slice line-through';
+        className += 'bg-gradient-to-r from-rose-500 to-rose-600 border-rose-800 text-white opacity-60 decoration-slice line-through shadow-rose-500/20';
         break;
       default:
         className += 'bg-slate-500 border-slate-700 text-white';
@@ -344,8 +368,27 @@ export const CalendarView = () => {
     : (dateSettings.language === 'ar' ? 'ar' : 'en-US');
 
   return (
-    <div className="h-[calc(100vh-80px)] lg:h-[calc(100vh-100px)] p-4 md:p-6 glass rounded-[32px] flex flex-col overflow-hidden bg-white/60 dark:bg-slate-900/60 border border-white/40 dark:border-white/5 relative shadow-soft">
-      <div className="w-full flex justify-end mb-4 z-10 px-2 lg:px-4">
+    <div className="w-full min-h-[calc(100vh-80px)] p-3 md:p-6 glass rounded-[32px] flex flex-col bg-white/60 dark:bg-slate-900/60 border border-white/40 dark:border-white/5 relative shadow-soft">
+      {/* Top Controls Row: Status Legend (ONLY in Month view) on the left/right + FilterPopover */}
+      <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 z-10 px-2 lg:px-4">
+        {/* Status Legend visible ONLY in Month View at the TOP */}
+        {view === 'month' ? (
+          <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800/60 shadow-sm">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-sm animate-pulse"></div>
+              <span>{language === 'ar' ? 'مؤكد (Confirmed)' : 'Confirmed'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-3 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/60 shadow-sm">
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm"></div>
+              <span>{language === 'ar' ? 'غير مؤكد (Pending)' : 'Pending'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800/60 shadow-sm">
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm"></div>
+              <span>{language === 'ar' ? 'ملغي (Cancelled)' : 'Cancelled'}</span>
+            </div>
+          </div>
+        ) : <div />}
+
         <FilterPopover>
           {/* Unit Filter */}
           <div className="flex flex-col gap-1.5 w-72 pt-2 pb-2 border-b border-gray-100 dark:border-gray-700">
@@ -389,45 +432,32 @@ export const CalendarView = () => {
         </FilterPopover>
       </div>
 
-      <div className="flex-1 min-h-0 shrink-0 w-full mb-4">
-        <BigCalendar
-          localizer={localizer}
-          events={events}
-          startAccessor="start"
-          endAccessor="end"
-          rtl={calendarCulture === 'ar'}
-          culture={calendarCulture}
-          messages={messages}
-          components={{
-            toolbar: CustomToolbar,
-            event: CustomEvent
-          }}
-          view={view}
-          onView={setView}
-          date={date}
-          onNavigate={onNavigate}
-          length={35}
-          eventPropGetter={eventPropGetter}
-          onSelectEvent={handleSelectEvent}
-          views={{ month: true, agenda: true, availability: AvailabilityPanel } as any}
-          popup
-          className="font-sans h-full text-gray-700 dark:text-gray-200"
-        />
-      </div>
-
-      {/* Enhanced Legend Footer */}
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-center items-center gap-6 text-xs font-bold">
-        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full">
-          <div className="w-3 h-3 rounded-full bg-blue-600 shadow-sm"></div>
-          {language === 'ar' ? 'مؤكد (Confirmed)' : 'Confirmed'}
-        </div>
-        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-full">
-          <div className="w-3 h-3 rounded-full bg-amber-400 shadow-sm"></div>
-          {language === 'ar' ? 'غير مؤكد (Pending)' : 'Pending'}
-        </div>
-        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 rounded-full">
-          <div className="w-3 h-3 rounded-full bg-rose-500 shadow-sm"></div>
-          {language === 'ar' ? 'ملغي (Cancelled)' : 'Cancelled'}
+      {/* Calendar Area with very large width and height */}
+      <div className="w-full overflow-x-auto pb-4">
+        <div className={`w-full ${view === 'month' ? 'min-w-[1150px] min-h-[1250px]' : 'min-h-[700px]'}`}>
+          <BigCalendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start"
+            endAccessor="end"
+            rtl={calendarCulture === 'ar'}
+            culture={calendarCulture}
+            messages={messages}
+            components={{
+              toolbar: CustomToolbar,
+              event: CustomEvent
+            }}
+            view={view}
+            onView={setView}
+            date={date}
+            onNavigate={onNavigate}
+            length={35}
+            eventPropGetter={eventPropGetter}
+            onSelectEvent={handleSelectEvent}
+            views={{ month: true, agenda: true, availability: AvailabilityPanel } as any}
+            popup
+            className="font-sans w-full h-full text-gray-700 dark:text-gray-200"
+          />
         </div>
       </div>
 
