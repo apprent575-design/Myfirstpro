@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer, ToolbarProps, View, EventProps } from 'react-big-calendar';
 import { format, getDay, addDays, addMonths, endOfMonth, isValid, isWithinInterval } from 'date-fns';
 import { enUS, arSA } from 'date-fns/locale';
@@ -544,15 +544,36 @@ export const CalendarView = () => {
 
   const navigate = useNavigate();
 
+  const scrollToToday = () => {
+    setTimeout(() => {
+      const todayCell = document.querySelector('.rbc-today');
+      if (todayCell) {
+        todayCell.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'center'
+        });
+      }
+    }, 150);
+  };
+
   const handleNavigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
     if (action === 'TODAY') {
-      setDate(startOfMonth(new Date()));
+      const now = new Date();
+      setDate(now);
+      scrollToToday();
     } else if (action === 'PREV') {
       setDate(d => addMonths(d, -1));
     } else if (action === 'NEXT') {
       setDate(d => addMonths(d, 1));
     }
   };
+
+  useEffect(() => {
+    if (view === 'month') {
+      scrollToToday();
+    }
+  }, [view]);
 
   const onNavigate = (newDate: Date) => {
     setDate(newDate);
@@ -641,8 +662,8 @@ export const CalendarView = () => {
       {/* 2. DEDICATED INDEPENDENT SCROLLABLE BODY AREA */}
       <div className="flex-1 min-h-0 w-full overflow-hidden relative">
         {view === 'month' && (
-          <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
-            <div className="min-w-[1050px] min-h-[960px] p-1">
+          <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner custom-scrollbar">
+            <div className="w-[1365px] min-w-[1365px] min-h-[660px] p-1">
               <BigCalendar
                 localizer={localizer}
                 events={events}
