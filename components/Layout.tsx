@@ -56,14 +56,14 @@ export const Layout = ({ children }: { children?: React.ReactNode }) => {
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-20 md:hidden backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={`
-        fixed md:sticky top-0 h-screen w-72 glass z-30 transition-transform duration-300 ease-in-out border-r border-white/40 dark:border-white/5
+        fixed md:sticky top-0 h-screen w-72 glass z-50 transition-transform duration-300 ease-in-out border-r border-white/40 dark:border-white/5
         ${isRTL ? 'right-0 border-l border-r-0' : 'left-0'}
         ${sidebarOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}
         md:translate-x-0

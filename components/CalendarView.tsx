@@ -84,68 +84,136 @@ interface AvailabilitySegment {
   from: number; // day of month (1-based)
   to: number;
   available: boolean;
+  bookingInfo?: string;
+  unitName?: string;
 }
 
-const computeAvailability = (
+interface UnitSchedule {
+  unitId: string;
+  unitName: string;
+  segments: AvailabilitySegment[];
+  availableDays: number;
+  unavailableDays: number;
+}
+
+// Computes timeline where checkout days are open for checkin:
+// e.g. Booking 3->5 results in: [1->3 Available], [3->5 Booked], [5->daysInMonth Available]
+const computeUnitSchedule = (
+  unitId: string,
+  unitName: string,
   bookings: Booking[],
-  monthDate: Date,
-  totalUnitsCount: number = 1
-): AvailabilitySegment[] => {
+  monthDate: Date
+): UnitSchedule => {
   const mStart = startOfMonth(monthDate);
   const mEnd = endOfMonth(monthDate);
   const daysInMonth = mEnd.getDate();
 
-  // Track which units are occupied on each day of the month (1-based)
-  const occupiedUnitsPerDay = Array.from({ length: daysInMonth + 1 }, () => new Set<string>());
+  // 1. Filter bookings for this unit that intersect the month
+  const unitBookings = bookings
+    .filter(b => (b.unit_id === unitId || !unitId || unitId === 'all') && b.status !== BookingStatus.CANCELLED)
+    .map(b => {
+      const s = new Date(`${b.start_date}T00:00:00`);
+      const e = new Date(`${b.end_date}T00:00:00`);
+      return { s, e, raw: b };
+    })
+    .filter(({ s, e }) => isValid(s) && isValid(e) && s <= mEnd && e >= mStart);
 
-  bookings.forEach(b => {
-    if (b.status === BookingStatus.CANCELLED) return;
-    const s = new Date(`${b.start_date}T00:00:00`);
-    const e = new Date(`${b.end_date}T00:00:00`);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
+  interface BookingInterval {
+    start: number;
+    end: number;
+    titles: string[];
+  }
 
-    const unitKey = b.unit_id || b.id;
-
-    // Single-day rental (check-in and check-out on the same day)
-    if (s.getTime() === e.getTime()) {
-      if (s >= mStart && s <= mEnd) {
-        occupiedUnitsPerDay[s.getDate()].add(unitKey);
-      }
-      return;
-    }
-
-    // Multi-day rental:
-    // Occupied nights run from check-in day (s) up to the day before checkout (e - 1).
-    // The checkout day (e) is NOT occupied by this booking.
-    // It is available for a new rental to begin, UNLESS another rental starts on day (e).
-    const lastNight = new Date(e);
-    lastNight.setDate(lastNight.getDate() - 1);
-    const from = Math.max(s.getTime(), mStart.getTime());
-    const to = Math.min(lastNight.getTime(), mEnd.getTime());
-    if (to < from) return;
-
-    const fromDay = new Date(from).getDate();
-    const toDay = new Date(to).getDate();
-    for (let d = fromDay; d <= toDay; d++) {
-      occupiedUnitsPerDay[d].add(unitKey);
+  const rawIntervals: BookingInterval[] = [];
+  unitBookings.forEach(({ s, e, raw }) => {
+    const startDay = s < mStart ? 1 : s.getDate();
+    const endDay = e > mEnd ? daysInMonth : e.getDate();
+    if (startDay <= endDay) {
+      rawIntervals.push({
+        start: startDay,
+        end: endDay,
+        titles: [raw.tenant_name]
+      });
     }
   });
 
-  const effectiveUnitsCount = Math.max(1, totalUnitsCount);
+  // Sort by start day ascending, then end day ascending
+  rawIntervals.sort((a, b) => a.start - b.start || a.end - b.end);
 
-  const segments: AvailabilitySegment[] = [];
-  let cur: AvailabilitySegment | null = null;
-  for (let d = 1; d <= daysInMonth; d++) {
-    // A day is available if at least one unit is free (not occupied) on that day
-    const available = occupiedUnitsPerDay[d].size < effectiveUnitsCount;
-    if (cur && cur.available === available) {
-      cur.to = d;
+  // Merge contiguous or overlapping bookings (e.g. checkout Day 5 meets checkin Day 5)
+  const mergedBooked: BookingInterval[] = [];
+  for (const interval of rawIntervals) {
+    if (mergedBooked.length === 0) {
+      mergedBooked.push({ ...interval });
     } else {
-      cur = { from: d, to: d, available };
-      segments.push(cur);
+      const last = mergedBooked[mergedBooked.length - 1];
+      if (interval.start <= last.end) {
+        last.end = Math.max(last.end, interval.end);
+        last.titles.push(...interval.titles);
+      } else {
+        mergedBooked.push({ ...interval });
+      }
     }
   }
-  return segments;
+
+  // 3. Build timeline: alternating Available and Booked intervals
+  const segments: AvailabilitySegment[] = [];
+  let currentDay = 1;
+
+  for (const b of mergedBooked) {
+    // Gap before this booking is AVAILABLE
+    if (b.start > currentDay) {
+      segments.push({
+        from: currentDay,
+        to: b.start,
+        available: true,
+        unitName
+      });
+    }
+    // The booked period
+    segments.push({
+      from: b.start,
+      to: b.end,
+      available: false,
+      bookingInfo: b.titles.join(' • '),
+      unitName
+    });
+    currentDay = Math.max(currentDay, b.end);
+  }
+
+  // Gap after the last booking to the end of the month is AVAILABLE
+  if (currentDay < daysInMonth) {
+    segments.push({
+      from: currentDay,
+      to: daysInMonth,
+      available: true,
+      unitName
+    });
+  } else if (mergedBooked.length === 0) {
+    // Whole month is available
+    segments.push({
+      from: 1,
+      to: daysInMonth,
+      available: true,
+      unitName
+    });
+  }
+
+  // Calculate nights
+  let unavailableDays = 0;
+  mergedBooked.forEach(b => {
+    unavailableDays += Math.max(1, b.end - b.start);
+  });
+  unavailableDays = Math.min(daysInMonth, unavailableDays);
+  const availableDays = Math.max(0, daysInMonth - unavailableDays);
+
+  return {
+    unitId,
+    unitName,
+    segments,
+    availableDays,
+    unavailableDays
+  };
 };
 
 // Custom Toolbar Component - stationary at the top
@@ -231,76 +299,149 @@ export const CalendarView = () => {
   const monthStart = startOfMonth(date);
   const nextMonthStart = startOfMonth(addMonths(date, 1));
 
-  const totalTargetUnits = filterUnitIds.length > 0 ? filterUnitIds.length : state.units.length;
+  const targetUnits = useMemo(() => {
+    if (filterUnitIds.length > 0) {
+      return state.units.filter(u => filterUnitIds.includes(u.id));
+    }
+    return state.units.length > 0
+      ? state.units
+      : [{ id: 'default', name: language === 'ar' ? 'الوحدة' : 'Unit' } as Unit];
+  }, [filterUnitIds, state.units, language]);
 
-  // Availability segments (available/unavailable day ranges) for the currently displayed month
-  const availability = useMemo(
-    () => computeAvailability(
-      state.bookings
-        .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
-        .filter(b => filterUnitIds.length === 0 || filterUnitIds.includes(b.unit_id)),
-      date,
-      totalTargetUnits
-    ),
-    [state.bookings, filterBookingIds, filterUnitIds, date, totalTargetUnits]
-  );
+  const [selectedUnitScheduleId, setSelectedUnitScheduleId] = useState<string>('all');
 
-  const availableDays = availability.filter(s => s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
-  const unavailableDays = availability.filter(s => !s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
+  const unitSchedules = useMemo(() => {
+    return targetUnits.map(u => computeUnitSchedule(u.id, u.name, state.bookings, date));
+  }, [targetUnits, state.bookings, date]);
 
-  // Full panel for the "Availability" tab: vertical list of the month's day ranges
+  const displayedSchedules = useMemo(() => {
+    if (selectedUnitScheduleId === 'all' || targetUnits.length <= 1) {
+      return unitSchedules;
+    }
+    return unitSchedules.filter(s => s.unitId === selectedUnitScheduleId);
+  }, [unitSchedules, selectedUnitScheduleId, targetUnits.length]);
+
+  const totalAvailableDays = unitSchedules.reduce((sum, s) => sum + s.availableDays, 0);
+  const totalUnavailableDays = unitSchedules.reduce((sum, s) => sum + s.unavailableDays, 0);
+
+  // Full panel for the "Availability" tab: timeline list of day ranges per unit
   const AvailabilityPanel = () => (
-    <div className="w-full p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h3 className="text-lg font-black text-gray-800 dark:text-white capitalize">
-          {format(date, 'MMMM yyyy', { locale: dateLocale })}
-        </h3>
+    <div className="w-full p-4 md:p-6 bg-white/60 dark:bg-slate-800/40 rounded-2xl border border-white/60 dark:border-white/5 shadow-sm space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-gray-200/60 dark:border-gray-700/60">
+        <div>
+          <h3 className="text-xl font-black text-gray-800 dark:text-white capitalize">
+            {language === 'ar' ? 'الأيام المتاحة' : 'Availability'} — {format(date, 'MMMM yyyy', { locale: dateLocale })}
+          </h3>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-0.5">
+            {language === 'ar'
+              ? 'يوم انتهاء الحجز متاح لبدء حجز جديد (تسليم واستلام في نفس اليوم)'
+              : 'Checkout day is available for a new booking (same-day transition)'}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            {language === 'ar' ? `${availableDays} يوم متاح` : `${availableDays} days available`}
+          <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            {language === 'ar' ? `${totalAvailableDays} يوم متاح` : `${totalAvailableDays} days available`}
           </span>
-          <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-            {language === 'ar' ? `${unavailableDays} يوم غير متاح` : `${unavailableDays} days unavailable`}
+          <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+            {language === 'ar' ? `${totalUnavailableDays} يوم محجوز` : `${totalUnavailableDays} days booked`}
           </span>
         </div>
       </div>
-      <div className="space-y-2.5">
-        {availability.map((seg, i) => (
-          <div
-            key={i}
-            className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border transition-all ${
-              seg.available
-                ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200/70 dark:border-emerald-800/60'
-                : 'bg-rose-50/70 dark:bg-rose-900/20 border-rose-200/70 dark:border-rose-800/60'
+
+      {targetUnits.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-gray-100 dark:border-gray-700/50">
+          <button
+            onClick={() => setSelectedUnitScheduleId('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              selectedUnitScheduleId === 'all'
+                ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
+                : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <span className={`w-9 h-9 flex items-center justify-center rounded-xl font-black text-sm ${seg.available ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30' : 'bg-rose-500 text-white shadow shadow-rose-500/30'}`}>
-                {seg.available ? '✓' : '✕'}
-              </span>
-              <span className="font-bold text-gray-800 dark:text-white text-sm md:text-base">
-                {language === 'ar'
-                  ? (seg.from === seg.to
-                      ? (seg.available ? `يوم ${seg.from} فاضي` : `يوم ${seg.from} محجوز`)
-                      : `من يوم ${seg.from} إلى يوم ${seg.to}`)
-                  : (seg.from === seg.to
-                      ? (seg.available ? `Day ${seg.from} (Free)` : `Day ${seg.from} (Booked)`)
-                      : `Day ${seg.from} to day ${seg.to}`)}
-              </span>
+            {language === 'ar' ? 'كل الوحدات' : 'All Units'}
+          </button>
+          {targetUnits.map(u => (
+            <button
+              key={u.id}
+              onClick={() => setSelectedUnitScheduleId(u.id)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                selectedUnitScheduleId === u.id
+                  ? 'bg-primary-600 text-white shadow-md shadow-primary-600/20'
+                  : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100'
+              }`}
+            >
+              {u.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {displayedSchedules.map(sched => (
+          <div key={sched.unitId} className="space-y-3">
+            {targetUnits.length > 1 && (
+              <div className="flex items-center justify-between px-1">
+                <h4 className="font-extrabold text-base text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                  <Home size={16} className="text-primary-500" />
+                  <span>{sched.unitName}</span>
+                </h4>
+                <div className="flex items-center gap-2 text-xs font-bold">
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    {language === 'ar' ? `${sched.availableDays} متاح` : `${sched.availableDays} free`}
+                  </span>
+                  <span>•</span>
+                  <span className="text-rose-600 dark:text-rose-400">
+                    {language === 'ar' ? `${sched.unavailableDays} محجوز` : `${sched.unavailableDays} booked`}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {sched.segments.map((seg, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between px-4 py-3 rounded-2xl border transition-all ${
+                    seg.available
+                      ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200/70 dark:border-emerald-800/60'
+                      : 'bg-rose-50/70 dark:bg-rose-900/20 border-rose-200/70 dark:border-rose-800/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`w-9 h-9 flex items-center justify-center rounded-xl font-black text-sm ${seg.available ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30' : 'bg-rose-500 text-white shadow shadow-rose-500/30'}`}>
+                      {seg.available ? '✓' : '✕'}
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-gray-800 dark:text-white text-sm md:text-base">
+                        {seg.from === seg.to
+                          ? (seg.available
+                              ? (language === 'ar' ? `يوم ${seg.from} فاضي` : `Day ${seg.from} (Free)`)
+                              : (language === 'ar' ? `يوم ${seg.from} محجوز` : `Day ${seg.from} (Booked)`))
+                          : (language === 'ar'
+                              ? `من يوم ${seg.from} إلى يوم ${seg.to}`
+                              : `Day ${seg.from} to day ${seg.to}`)}
+                      </span>
+                      {seg.bookingInfo && (
+                        <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                          {seg.bookingInfo}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className={`px-3.5 py-1.5 rounded-full text-xs font-black ${
+                    seg.available
+                      ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30'
+                      : 'bg-rose-500 text-white shadow shadow-rose-500/30'
+                  }`}>
+                    {seg.available
+                      ? (seg.from === seg.to
+                          ? (language === 'ar' ? 'فاضي' : 'Free')
+                          : (language === 'ar' ? 'متاح' : 'Available'))
+                      : (language === 'ar' ? 'محجوز' : 'Booked')}
+                  </span>
+                </div>
+              ))}
             </div>
-            <span className={`px-3.5 py-1.5 rounded-full text-xs font-black ${
-              seg.available
-                ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30'
-                : 'bg-rose-500 text-white shadow shadow-rose-500/30'
-            }`}>
-              {seg.available
-                ? (seg.from === seg.to
-                    ? (language === 'ar' ? 'فاضي' : 'Free')
-                    : (language === 'ar' ? 'متاح' : 'Available'))
-                : (seg.from === seg.to
-                    ? (language === 'ar' ? 'محجوز' : 'Booked')
-                    : (language === 'ar' ? 'غير متاح' : 'Unavailable'))}
-            </span>
           </div>
         ))}
       </div>
@@ -534,6 +675,11 @@ export const CalendarView = () => {
     return list;
   }, [state.bookings, state.units, filterBookingIds, filterUnitIds, monthStart, nextMonthStart]);
 
+  const formats = useMemo(() => ({
+    weekdayFormat: (d: Date) => format(d, 'EEEE', { locale: dateLocale }),
+    monthHeaderFormat: (d: Date) => format(d, 'MMMM yyyy', { locale: dateLocale }),
+  }), [dateLocale]);
+
   const messages = {
     allDay: 'All Day',
     previous: isRTL ? 'السابق' : 'Back',
@@ -628,21 +774,21 @@ export const CalendarView = () => {
       {/* 1. FIXED STATIONARY TOP HEADER: Legend/Filter + CustomToolbar */}
       <div className="shrink-0 z-20 pb-2 border-b border-gray-200/50 dark:border-gray-700/50 mb-3">
         {/* Top Controls Row: Status Legend (ONLY in Month view) on one side + FilterPopover on the other */}
-        <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 mb-2.5 px-1">
-          {/* Status Legend visible ONLY in Month View */}
+        <div className="w-full flex flex-wrap items-center justify-between gap-2.5 mb-2.5 px-1">
+          {/* Status Legend visible ONLY in Month View — sleek unified segmented container */}
           {view === 'month' ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold animate-in fade-in duration-300">
-              <div className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-xl border border-blue-200 dark:border-blue-800/60 shadow-sm">
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-sm animate-pulse"></div>
-                <span>{language === 'ar' ? 'مؤكد (Confirmed)' : 'Confirmed'}</span>
+            <div className="flex items-center gap-1.5 p-1 bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-gray-200/70 dark:border-gray-700/60 shadow-xs backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-900/30 border border-blue-200/60 dark:border-blue-800/40">
+                <span className="w-2 h-2 rounded-full bg-blue-600 shadow-xs animate-pulse"></span>
+                <span>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-xl border border-amber-200 dark:border-amber-800/60 shadow-sm">
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm"></div>
-                <span>{language === 'ar' ? 'غير مؤكد (Pending)' : 'Pending'}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-800/40">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shadow-xs"></span>
+                <span>{language === 'ar' ? 'غير مؤكد' : 'Pending'}</span>
               </div>
-              <div className="flex items-center gap-1.5 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 px-3 py-1 rounded-xl border border-rose-200 dark:border-rose-800/60 shadow-sm">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm"></div>
-                <span>{language === 'ar' ? 'ملغي (Cancelled)' : 'Cancelled'}</span>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-800/40">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shadow-xs"></span>
+                <span>{language === 'ar' ? 'ملغي' : 'Cancelled'}</span>
               </div>
             </div>
           ) : <div />}
@@ -703,7 +849,7 @@ export const CalendarView = () => {
       <div className="flex-1 min-h-0 w-full overflow-hidden relative">
         {view === 'month' && (
           <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
-            <div className="w-[1365px] min-w-[1365px] p-1">
+            <div className="w-[1365px] min-w-[1365px]">
               <BigCalendar
                 localizer={localizer}
                 events={events}
@@ -712,6 +858,7 @@ export const CalendarView = () => {
                 rtl={calendarCulture === 'ar'}
                 culture={calendarCulture}
                 messages={messages}
+                formats={formats}
                 toolbar={false}
                 components={{
                   event: CustomEvent
