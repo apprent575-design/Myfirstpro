@@ -141,7 +141,7 @@
 
     /* Date Numbers */
     .rbc-date-cell {
-      padding: 6px 8px !important;
+      padding: 6px 10px !important;
       font-weight: 800 !important;
       font-size: 0.95rem !important;
     }
@@ -151,46 +151,59 @@
       /* Bright text for current month */
     }
 
-    /* Today Cell with prominent Spotlight highlight */
+    /* Today Cell */
     .rbc-today {
       background-color: #eff6ff !important;
-      box-shadow: inset 0 0 0 2.5px #2563eb !important;
-      border-radius: 8px;
-      transition: all 0.3s ease;
     }
 
     .dark .rbc-today {
-      background-color: rgba(59, 130, 246, 0.22) !important;
-      box-shadow: inset 0 0 0 2.5px #3b82f6 !important;
+      background-color: rgba(59, 130, 246, 0.2) !important;
     }
 
-    .rbc-today .rbc-button-link {
-      background-color: #2563eb;
-      color: white !important;
-      border-radius: 9999px;
-      width: 24px;
-      height: 24px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      font-size: 0.85rem;
-      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+    .rbc-day-bg.rbc-today {
+      border: 2px solid #3b82f6 !important;
     }
 
-    /* Event Bars — tailored to fit 2 bars per day */
+    .dark .rbc-day-bg.rbc-today {
+      border: 2px solid #60a5fa !important;
+    }
+
+    /* Pulse animation when clicking Today */
+    @keyframes todayPulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.8);
+        background-color: rgba(59, 130, 246, 0.35) !important;
+      }
+      50% {
+        box-shadow: 0 0 0 14px rgba(59, 130, 246, 0);
+        background-color: rgba(59, 130, 246, 0.25) !important;
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+        background-color: rgba(59, 130, 246, 0.15) !important;
+      }
+    }
+
+    .today-pulse-highlight {
+      animation: todayPulse 1.2s ease-out 2 !important;
+      z-index: 20 !important;
+    }
+
+    /* Event Bars — sized to fit comfortably and expand vertically when name wraps */
     .rbc-event {
-      min-height: 34px !important;
-      height: 34px !important;
+      min-height: 35px !important;
+      height: auto !important;
       border-radius: 8px !important;
       box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1) !important;
       font-size: 13px !important;
-      line-height: 1.3;
-      padding: 2px 5px !important;
-      margin-bottom: 3px !important;
+      line-height: 1.25;
+      padding: 3px 6px !important;
+      margin-bottom: 4px !important;
       transition: transform 0.15s ease, box-shadow 0.15s ease;
       display: flex !important;
-      align-items: center !important;
+      align-items: stretch !important;
+      white-space: normal !important;
+      word-break: break-word !important;
     }
 
     .rbc-event:hover {
@@ -199,15 +212,28 @@
       z-index: 25 !important;
     }
 
-    /* Row height to comfortably fit exactly 2 booking bars */
+    /* Allow event content to wrap across lines */
+    .rbc-row-segment .rbc-event-content,
+    .rbc-event-content {
+      overflow: visible !important;
+      white-space: normal !important;
+      text-overflow: clip !important;
+      width: 100% !important;
+      word-break: break-word !important;
+      line-height: 1.25 !important;
+    }
+
+    /* Sized to fit precisely 2 bars initially, and expands downward if events wrap */
     .rbc-month-row {
-      min-height: 125px !important;
+      min-height: 128px !important;
+      height: auto !important;
       overflow: visible !important;
     }
 
     .rbc-row-content {
       overflow: visible !important;
       z-index: 10;
+      height: auto !important;
     }
 
     /* Keep weekday names visible while the month grid scrolls */
@@ -226,7 +252,7 @@
       display: block !important;
       color: #3b82f6 !important;
       font-weight: bold;
-      font-size: 13px;
+      font-size: 12px;
     }
 
     /* Hide Scrollbar util */

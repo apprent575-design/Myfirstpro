@@ -48,38 +48,33 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-// Custom Event Component for richer, highly legible display
+// Custom Event Component for richer, highly legible display — wraps long names downwards
 const CustomEvent = ({ event }: EventProps<any>) => {
   const b = event.allData;
 
   const StatusIcon = () => {
     switch (event.status) {
-      case BookingStatus.CONFIRMED: return <CheckCircle size={15} strokeWidth={2.5} className="shrink-0 text-white" />;
-      case BookingStatus.PENDING: return <Clock size={15} strokeWidth={2.5} className="shrink-0 text-slate-900" />;
-      case BookingStatus.CANCELLED: return <XCircle size={15} strokeWidth={2.5} className="shrink-0 text-white" />;
+      case BookingStatus.CONFIRMED: return <CheckCircle size={13} strokeWidth={2.5} className="shrink-0 text-white mt-0.5" />;
+      case BookingStatus.PENDING: return <Clock size={13} strokeWidth={2.5} className="shrink-0 text-slate-900 mt-0.5" />;
+      case BookingStatus.CANCELLED: return <XCircle size={13} strokeWidth={2.5} className="shrink-0 text-white mt-0.5" />;
       default: return null;
     }
   };
 
   return (
     <div
-      className="flex items-center justify-between w-full h-full px-2 py-0.5 gap-2 overflow-hidden select-none"
+      className="flex items-start justify-between w-full h-auto py-0.5 px-0.5 gap-1.5 select-none"
       title={`${event.title} • ${event.desc} (${b?.start_date} ➔ ${b?.end_date})`}
     >
-      <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+      <div className="flex items-start gap-1 min-w-0 flex-1">
         <StatusIcon />
-        <span className="font-black text-xs md:text-[13.5px] truncate tracking-tight drop-shadow-sm">
+        <span className="font-extrabold text-xs leading-tight tracking-tight drop-shadow-sm break-words whitespace-normal">
           {event.title}
         </span>
-        <span className="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded bg-black/20 dark:bg-black/35 backdrop-blur-sm">
-          {event.desc}
-        </span>
       </div>
-      {b?.start_date && b?.end_date && (
-        <span className="text-[10px] font-bold opacity-85 shrink-0 hidden lg:inline-block bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded">
-          {b.start_date.slice(5)} ➔ {b.end_date.slice(5)}
-        </span>
-      )}
+      <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/20 dark:bg-black/35 backdrop-blur-sm self-start">
+        {event.desc}
+      </span>
     </div>
   );
 };
@@ -91,32 +86,58 @@ interface AvailabilitySegment {
   available: boolean;
 }
 
-const computeAvailability = (bookings: Booking[], monthDate: Date): AvailabilitySegment[] => {
+const computeAvailability = (
+  bookings: Booking[],
+  monthDate: Date,
+  totalUnitsCount: number = 1
+): AvailabilitySegment[] => {
   const mStart = startOfMonth(monthDate);
   const mEnd = endOfMonth(monthDate);
   const daysInMonth = mEnd.getDate();
-  const booked = new Array<boolean>(daysInMonth + 1).fill(false);
+
+  // Track which units are occupied on each day of the month (1-based)
+  const occupiedUnitsPerDay = Array.from({ length: daysInMonth + 1 }, () => new Set<string>());
 
   bookings.forEach(b => {
     if (b.status === BookingStatus.CANCELLED) return;
     const s = new Date(`${b.start_date}T00:00:00`);
     const e = new Date(`${b.end_date}T00:00:00`);
     if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
-    // Occupied nights run from check-in until the day before checkout (checkout day stays available)
+
+    const unitKey = b.unit_id || b.id;
+
+    // Single-day rental (check-in and check-out on the same day)
+    if (s.getTime() === e.getTime()) {
+      if (s >= mStart && s <= mEnd) {
+        occupiedUnitsPerDay[s.getDate()].add(unitKey);
+      }
+      return;
+    }
+
+    // Multi-day rental:
+    // Occupied nights run from check-in day (s) up to the day before checkout (e - 1).
+    // The checkout day (e) is NOT occupied by this booking.
+    // It is available for a new rental to begin, UNLESS another rental starts on day (e).
     const lastNight = new Date(e);
     lastNight.setDate(lastNight.getDate() - 1);
     const from = Math.max(s.getTime(), mStart.getTime());
     const to = Math.min(lastNight.getTime(), mEnd.getTime());
     if (to < from) return;
+
     const fromDay = new Date(from).getDate();
     const toDay = new Date(to).getDate();
-    for (let d = fromDay; d <= toDay; d++) booked[d] = true;
+    for (let d = fromDay; d <= toDay; d++) {
+      occupiedUnitsPerDay[d].add(unitKey);
+    }
   });
+
+  const effectiveUnitsCount = Math.max(1, totalUnitsCount);
 
   const segments: AvailabilitySegment[] = [];
   let cur: AvailabilitySegment | null = null;
   for (let d = 1; d <= daysInMonth; d++) {
-    const available = !booked[d];
+    // A day is available if at least one unit is free (not occupied) on that day
+    const available = occupiedUnitsPerDay[d].size < effectiveUnitsCount;
     if (cur && cur.available === available) {
       cur.to = d;
     } else {
@@ -210,15 +231,18 @@ export const CalendarView = () => {
   const monthStart = startOfMonth(date);
   const nextMonthStart = startOfMonth(addMonths(date, 1));
 
+  const totalTargetUnits = filterUnitIds.length > 0 ? filterUnitIds.length : state.units.length;
+
   // Availability segments (available/unavailable day ranges) for the currently displayed month
   const availability = useMemo(
     () => computeAvailability(
       state.bookings
         .filter(b => filterBookingIds.length === 0 || filterBookingIds.includes(b.id))
         .filter(b => filterUnitIds.length === 0 || filterUnitIds.includes(b.unit_id)),
-      date
+      date,
+      totalTargetUnits
     ),
-    [state.bookings, filterBookingIds, filterUnitIds, date]
+    [state.bookings, filterBookingIds, filterUnitIds, date, totalTargetUnits]
   );
 
   const availableDays = availability.filter(s => s.available).reduce((sum, s) => sum + (s.to - s.from + 1), 0);
@@ -256,8 +280,12 @@ export const CalendarView = () => {
               </span>
               <span className="font-bold text-gray-800 dark:text-white text-sm md:text-base">
                 {language === 'ar'
-                  ? `من يوم ${seg.from} إلى يوم ${seg.to}`
-                  : `Day ${seg.from} to day ${seg.to}`}
+                  ? (seg.from === seg.to
+                      ? (seg.available ? `يوم ${seg.from} فاضي` : `يوم ${seg.from} محجوز`)
+                      : `من يوم ${seg.from} إلى يوم ${seg.to}`)
+                  : (seg.from === seg.to
+                      ? (seg.available ? `Day ${seg.from} (Free)` : `Day ${seg.from} (Booked)`)
+                      : `Day ${seg.from} to day ${seg.to}`)}
               </span>
             </div>
             <span className={`px-3.5 py-1.5 rounded-full text-xs font-black ${
@@ -265,7 +293,13 @@ export const CalendarView = () => {
                 ? 'bg-emerald-500 text-white shadow shadow-emerald-500/30'
                 : 'bg-rose-500 text-white shadow shadow-rose-500/30'
             }`}>
-              {seg.available ? (language === 'ar' ? 'متاح' : 'Available') : (language === 'ar' ? 'غير متاح' : 'Unavailable')}
+              {seg.available
+                ? (seg.from === seg.to
+                    ? (language === 'ar' ? 'فاضي' : 'Free')
+                    : (language === 'ar' ? 'متاح' : 'Available'))
+                : (seg.from === seg.to
+                    ? (language === 'ar' ? 'محجوز' : 'Booked')
+                    : (language === 'ar' ? 'غير متاح' : 'Unavailable'))}
             </span>
           </div>
         ))}
@@ -376,21 +410,21 @@ export const CalendarView = () => {
                 <div
                   key={b.id}
                   onClick={() => setSelectedBooking(b)}
-                  className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-gray-100 dark:border-gray-700/60 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group"
+                  className="p-4 rounded-2xl bg-white dark:bg-slate-800/80 border border-gray-100 dark:border-gray-700/60 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row items-start md:items-center justify-between gap-4 group min-h-[5.5rem] h-auto"
                 >
                   {/* Left: Tenant & Unit info */}
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center font-black text-lg shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="flex items-start md:items-center gap-3.5 flex-1 min-w-0 w-full md:w-auto">
+                    <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center font-black text-lg shrink-0 group-hover:scale-105 transition-transform mt-0.5 md:mt-0">
                       <User size={22} />
                     </div>
-                    <div className="min-w-0">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-black text-base text-gray-900 dark:text-white truncate">
+                        <h4 className="font-black text-base text-gray-900 dark:text-white break-words whitespace-normal leading-snug">
                           {b.tenant_name}
                         </h4>
                         {statusBadge()}
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1 flex-wrap">
                         <span className="flex items-center gap-1 font-bold text-gray-700 dark:text-gray-300">
                           <Home size={14} className="text-primary-500" />
                           {unit?.name || 'Unit'}
@@ -406,7 +440,7 @@ export const CalendarView = () => {
                   </div>
 
                   {/* Right: Financial & Actions */}
-                  <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-2 md:pt-0 border-gray-100 dark:border-gray-700/60">
+                  <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-gray-100 dark:border-gray-700/60">
                     <div className="text-left rtl:text-right">
                       <div className="text-sm font-black text-gray-900 dark:text-white">
                         {b.price?.toLocaleString()} <span className="text-xs font-bold text-gray-500">{language === 'ar' ? 'ج.م' : 'EGP'}</span>
@@ -546,27 +580,19 @@ export const CalendarView = () => {
 
   const scrollToToday = () => {
     setTimeout(() => {
-      const todayCell = document.querySelector('.rbc-today');
+      const todayCell = document.querySelector('.rbc-day-bg.rbc-today') || document.querySelector('.rbc-today');
       if (todayCell) {
         todayCell.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
           inline: 'center'
         });
+        todayCell.classList.add('today-pulse-highlight');
+        setTimeout(() => {
+          todayCell.classList.remove('today-pulse-highlight');
+        }, 2500);
       }
-    }, 150);
-  };
-
-  const handleNavigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
-    if (action === 'TODAY') {
-      const now = new Date();
-      setDate(now);
-      scrollToToday();
-    } else if (action === 'PREV') {
-      setDate(d => addMonths(d, -1));
-    } else if (action === 'NEXT') {
-      setDate(d => addMonths(d, 1));
-    }
+    }, 120);
   };
 
   useEffect(() => {
@@ -574,6 +600,20 @@ export const CalendarView = () => {
       scrollToToday();
     }
   }, [view]);
+
+  const handleNavigate = (action: 'PREV' | 'NEXT' | 'TODAY') => {
+    if (action === 'TODAY') {
+      setDate(new Date());
+      if (view !== 'month') {
+        setView('month');
+      }
+      scrollToToday();
+    } else if (action === 'PREV') {
+      setDate(d => addMonths(d, -1));
+    } else if (action === 'NEXT') {
+      setDate(d => addMonths(d, 1));
+    }
+  };
 
   const onNavigate = (newDate: Date) => {
     setDate(newDate);
@@ -662,8 +702,8 @@ export const CalendarView = () => {
       {/* 2. DEDICATED INDEPENDENT SCROLLABLE BODY AREA */}
       <div className="flex-1 min-h-0 w-full overflow-hidden relative">
         {view === 'month' && (
-          <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner custom-scrollbar">
-            <div className="w-[1365px] min-w-[1365px] min-h-[660px] p-1">
+          <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
+            <div className="w-[1365px] min-w-[1365px] p-1">
               <BigCalendar
                 localizer={localizer}
                 events={events}
