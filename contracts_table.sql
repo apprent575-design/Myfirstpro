@@ -17,7 +17,9 @@ create table if not exists public.contracts (
   village_name text,
   start_date date,
   end_date date,
-  nights integer default 0,
+  nights integer default 0,          -- قديم: للتوافق مع العقود المحفوظة قبل التعديل
+  duration_mode text default 'days', -- 'days' | 'months' | 'years'
+  duration_value integer default 0,  -- عدد الأيام / الشهور / السنوات
   rent_amount numeric default 0,
   deposit_amount numeric default 0,
   payment_terms text,
@@ -54,3 +56,18 @@ create trigger contracts_touch_updated_at
 -- فهارس سريعة للبحث بالمستأجر/الحجز
 create index if not exists contracts_user_id_idx on public.contracts (user_id);
 create index if not exists contracts_booking_id_idx on public.contracts (booking_id);
+
+-- ============================================================
+--  لو الجدول كان اتعمل قبل كده (نسخة قديمة): الأعمدة الجديدة تتضاف بأمان
+--  المدة في العقد بقت (أيام / شهور / سنوات) بدل الليالي
+-- ============================================================
+alter table public.contracts add column if not exists duration_mode text default 'days';
+alter table public.contracts add column if not exists duration_value integer default 0;
+
+-- تحويل العقود القديمة المحفوظة بالليالي إلى أيام
+update public.contracts
+   set duration_mode = 'days',
+       duration_value = nights
+ where (duration_value is null or duration_value = 0)
+   and coalesce(nights, 0) > 0;
+

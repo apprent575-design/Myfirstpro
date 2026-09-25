@@ -1,5 +1,14 @@
-import { format, differenceInCalendarDays } from 'date-fns';
-import { Booking, ContractParty, PartyGender, PartyTitle, RentalContract, Unit, User } from '../types';
+import { format, differenceInCalendarDays, addDays, addMonths, addYears, isSameDay } from 'date-fns';
+import {
+  Booking,
+  ContractDurationMode,
+  ContractParty,
+  PartyGender,
+  PartyTitle,
+  RentalContract,
+  Unit,
+  User
+} from '../types';
 
 /* -------------------------------------------------------------------------
    عقود الإيجار: أدوات الكارت + نسخة محلية (cache) من العقود
@@ -70,6 +79,80 @@ export const mergeContractCache = (userId: string | undefined, dbList: RentalCon
   return writeContractCache(userId, [...byId.values()]);
 };
 
+// ---------- مدة الإيجار (أيام / شهور / سنوات) ----------
+
+export const daysLabel = (n: number) =>
+  n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n >= 3 && n <= 10 ? `${n} أيام` : `${n} يومًا`;
+
+export const monthsLabel = (n: number) =>
+  n === 1 ? 'شهر واحد' : n === 2 ? 'شهران' : n >= 3 && n <= 10 ? `${n} أشهر` : `${n} شهرًا`;
+
+export const yearsLabel = (n: number) =>
+  n === 1 ? 'سنة واحدة' : n === 2 ? 'سنتان' : n >= 3 && n <= 10 ? `${n} سنوات` : `${n} سنة`;
+
+const normalizeDurationMode = (mode?: string): ContractDurationMode =>
+  mode === 'months' || mode === 'years' ? mode : 'days';
+
+const parseIso = (iso?: string) => {
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// تاريخ نهاية المدة = تاريخ البداية + المدة المختارة
+export const contractEndDate = (
+  startDate: string,
+  mode: ContractDurationMode,
+  value: number
+): string => {
+  const start = parseIso(startDate);
+  const amount = Math.max(0, Math.floor(Number(value) || 0));
+  if (!start || amount <= 0) return '';
+  const end =
+    mode === 'months' ? addMonths(start, amount) : mode === 'years' ? addYears(start, amount) : addDays(start, amount);
+  return format(end, 'yyyy-MM-dd');
+};
+
+// هل عدد الأيام ده يوافق عددًا صحيحًا من الشهور على الكالندر؟
+// مثال: 365 يوم من 1/1 = سنة كاملة، و90 يوم ممكن تساوي 3 شهور وممكن لأ حسب الشهر اللي بدأت فيه
+export const equivalentMonths = (startDate: string, days: number): number => {
+  const start = parseIso(startDate);
+  if (!start || days <= 0) return 0;
+  const target = addDays(start, days);
+  for (let months = 1; months <= 60; months++) {
+    if (isSameDay(addMonths(start, months), target)) return months;
+  }
+  return 0;
+};
+
+const equivalentDaysLabel = (months: number) =>
+  months % 12 === 0 ? (months / 12 === 1 ? 'سنة كاملة' : yearsLabel(months / 12)) : monthsLabel(months);
+
+// النص اللي بيتكتب في العقد فعلًا — مفيش "ليالي" خالص
+export const contractDurationLabel = (contract: {
+  start_date: string;
+  duration_mode: ContractDurationMode;
+  duration_value: number;
+}): string => {
+  const value = Math.max(0, Math.floor(Number(contract.duration_value) || 0));
+  if (value <= 0) return '—';
+  if (contract.duration_mode === 'months') return monthsLabel(value);
+  if (contract.duration_mode === 'years') return yearsLabel(value);
+
+  // نظام الأيام: لو بيوافق عدد شهور على الكالندر نكتبها جنبه
+  const months = equivalentMonths(contract.start_date, value);
+  return months ? `${daysLabel(value)} (ما يعادل ${equivalentDaysLabel(months)})` : daysLabel(value);
+};
+
+// عقود قديمة كانت محفوظة بعدد الليالي فقط
+const legacyDurationValue = (row: any): number => {
+  const nights = Number(row?.nights) || 0;
+  if (nights > 0) return nights;
+  const start = parseIso(String(row?.start_date || '').slice(0, 10));
+  const end = parseIso(String(row?.end_date || '').slice(0, 10));
+  return start && end ? Math.max(0, differenceInCalendarDays(end, start)) : 0;
+};
+
 // ---------- تطبيع صفوف قاعدة البيانات ----------
 
 export const createParty = (overrides: Partial<ContractParty> = {}): ContractParty => {
@@ -114,7 +197,8 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   village_name: row?.village_name || '',
   start_date: String(row?.start_date || '').slice(0, 10),
   end_date: String(row?.end_date || '').slice(0, 10),
-  nights: Number(row?.nights) || 0,
+  duration_mode: normalizeDurationMode(row?.duration_mode),
+  duration_value: Number(row?.duration_value) || legacyDurationValue(row),
   rent_amount: Number(row?.rent_amount) || 0,
   deposit_amount: Number(row?.deposit_amount) || 0,
   payment_terms: row?.payment_terms || '',
@@ -186,6 +270,9 @@ export const buildContractDefaults = (
   existing: RentalContract[]
 ): RentalContract => {
   const today = new Date();
+  // الحجز بيتسجّل بالليالي — والعقد بيتكتب بالأيام (يوم لكل ليلة)
+  const durationMode: ContractDurationMode = 'days';
+  const durationValue = booking.nights || nightsBetween(booking.start_date, booking.end_date);
   return {
     id: newId(),
     user_id: user?.id,
@@ -204,8 +291,9 @@ export const buildContractDefaults = (
     unit_type: unit?.type || '',
     village_name: unit?.village_name_ar || unit?.village_name_en || '',
     start_date: booking.start_date,
-    end_date: booking.end_date,
-    nights: booking.nights || nightsBetween(booking.start_date, booking.end_date),
+    end_date: contractEndDate(booking.start_date, durationMode, durationValue) || booking.end_date,
+    duration_mode: durationMode,
+    duration_value: durationValue,
     rent_amount: booking.total_rental_price || 0,
     deposit_amount:
       (booking.security_deposit_enabled ? booking.security_deposit : booking.deposit_amount) || 0,

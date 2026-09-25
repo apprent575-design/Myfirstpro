@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Booking, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
+import { Booking, ContractDurationMode, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
 import {
   buildContractDefaults,
+  contractDurationLabel,
+  contractEndDate,
   contractsForTenant,
   createParty,
   newId,
@@ -126,21 +128,27 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
         : prev
     );
 
-  const computedNights = useMemo(() => {
-    if (!draft) return 0;
-    const s = new Date(`${draft.start_date}T00:00:00`);
-    const e = new Date(`${draft.end_date}T00:00:00`);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
-    return Math.max(0, Math.round((e.getTime() - s.getTime()) / 86400000));
-  }, [draft?.start_date, draft?.end_date]);
+  // نهاية المدة بتتحسب أوتوماتيك: تاريخ البداية + المدة المختارة (أيام / شهور / سنوات)
+  const computedEndDate = useMemo(
+    () => (draft ? contractEndDate(draft.start_date, draft.duration_mode, draft.duration_value) : ''),
+    [draft?.start_date, draft?.duration_mode, draft?.duration_value]
+  );
+
+  const durationLabel = useMemo(() => (draft ? contractDurationLabel(draft) : ''), [
+    draft?.start_date,
+    draft?.duration_mode,
+    draft?.duration_value,
+  ]);
 
   const validate = (c: RentalContract): string | null => {
     if (!c.parties.length) return isAr ? 'لازم طرف مستأجر واحد على الأقل.' : 'At least one tenant is required.';
     if (c.parties.some(p => !p.name.trim())) return isAr ? 'اكتب اسم كل طرف من المستأجرين.' : 'Enter every tenant name.';
     if (c.parties.some(p => p.national_id && !/^\d{14}$/.test(p.national_id)))
       return isAr ? 'الرقم القومي لازم يكون 14 رقمًا.' : 'National ID must be 14 digits.';
-    if (!c.start_date || !c.end_date) return isAr ? 'حدد تاريخ بداية ونهاية الإيجار.' : 'Set the rental start and end dates.';
-    if (computedNights <= 0) return isAr ? 'تاريخ النهاية لازم يكون بعد تاريخ البداية.' : 'End date must be after start date.';
+    if (!c.start_date) return isAr ? 'حدد تاريخ بداية الإيجار.' : 'Set the rental start date.';
+    if (!c.duration_value || c.duration_value < 1)
+      return isAr ? 'اكتب مدة الإيجار (عدد أيام أو شهور أو سنوات).' : 'Enter the rental duration (days / months / years).';
+    if (!computedEndDate) return isAr ? 'المدة غير صحيحة، راجع تاريخ البداية والعدد.' : 'Invalid duration, check the start date and the number.';
     if (c.rent_amount < 0 || c.deposit_amount < 0) return isAr ? 'المبالغ لازم تكون أرقامًا موجبة.' : 'Amounts must be positive numbers.';
     return null;
   };
@@ -156,7 +164,7 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
     setNotice(null);
     setBusy(exportAfter ? 'export' : 'save');
 
-    const toSave: RentalContract = { ...draft, nights: computedNights };
+    const toSave: RentalContract = { ...draft, end_date: computedEndDate };
     const alreadySaved = tenantContracts.some(c => c.id === toSave.id);
 
     try {
@@ -280,7 +288,7 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                         {contract.parties.map(p => `${p.title}/ ${p.name}`).join(' ، ')}
                       </div>
                       <div className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        {contract.start_date} ← {contract.end_date} •{' '}
+                        {contractDurationLabel(contract)} • {contract.start_date} ← {contract.end_date} •{' '}
                         {isAr
                           ? `إيجار ${contract.rent_amount.toLocaleString()} — تأمين ${contract.deposit_amount.toLocaleString()}`
                           : `Rent ${contract.rent_amount.toLocaleString()} — Deposit ${contract.deposit_amount.toLocaleString()}`}
@@ -376,8 +384,8 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>{isAr ? 'عدد الليالي (محسوب)' : 'Nights (computed)'}</label>
-                  <input className={`${inputClass} bg-gray-50 dark:bg-slate-800/50`} value={computedNights} readOnly />
+                  <label className={labelClass}>{isAr ? 'نهاية الإيجار (محسوبة)' : 'Rental end (computed)'}</label>
+                  <input className={`${inputClass} bg-gray-50 dark:bg-slate-800/50`} value={computedEndDate || '—'} readOnly />
                 </div>
               </div>
 
@@ -542,15 +550,63 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                     onChange={e => patch({ start_date: e.target.value })}
                   />
                 </div>
+              </div>
+
+              {/* المدة: أيام / شهور / سنوات — مفيش "ليالي" في العقد */}
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className={labelClass}>{isAr ? 'نهاية الإيجار' : 'Rental end'}</label>
+                  <label className={labelClass}>{isAr ? 'نظام المدة' : 'Duration mode'}</label>
+                  <div className="flex gap-1.5 p-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700">
+                    {([
+                      { value: 'days', label: isAr ? 'أيام' : 'Days' },
+                      { value: 'months', label: isAr ? 'شهور' : 'Months' },
+                      { value: 'years', label: isAr ? 'سنوات' : 'Years' },
+                    ] as { value: ContractDurationMode; label: string }[]).map(option => (
+                      <button
+                        key={option.value}
+                        onClick={() => patch({ duration_mode: option.value })}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          draft.duration_mode === option.value
+                            ? 'bg-primary-600 text-white shadow'
+                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    {draft.duration_mode === 'days'
+                      ? (isAr ? 'عدد الأيام' : 'Number of days')
+                      : draft.duration_mode === 'months'
+                        ? (isAr ? 'عدد الشهور' : 'Number of months')
+                        : (isAr ? 'عدد السنوات' : 'Number of years')}
+                  </label>
                   <input
-                    type="date"
+                    type="number"
+                    min={1}
                     className={inputClass}
-                    value={draft.end_date}
-                    onChange={e => patch({ end_date: e.target.value })}
+                    value={draft.duration_value}
+                    onChange={e => patch({ duration_value: Math.max(0, Number(e.target.value) || 0) })}
                   />
                 </div>
+                <div>
+                  <label className={labelClass}>{isAr ? 'نهاية الإيجار (محسوبة)' : 'Rental end (computed)'}</label>
+                  <input className={`${inputClass} bg-gray-50 dark:bg-slate-800/50`} value={computedEndDate || '—'} readOnly />
+                </div>
+              </div>
+
+              <div className="mt-3 p-3 rounded-xl bg-primary-50/70 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 text-xs font-bold text-primary-800 dark:text-primary-200">
+                {isAr ? 'المدة في العقد' : 'Contract duration'}: {durationLabel || '—'}
+                {draft.duration_mode === 'days' && (
+                  <span className="block mt-1 font-semibold opacity-80">
+                    {isAr
+                      ? 'لو عدد الأيام يوافق عددًا صحيحًا من الشهور على الكالندر (زي 365 يوم = سنة كاملة) هيتكتب جنبه تلقائيًا.'
+                      : 'If the days match a whole number of calendar months (e.g. 365 days = a full year) it is added automatically.'}
+                  </span>
+                )}
               </div>
 
               {/* Amounts */}

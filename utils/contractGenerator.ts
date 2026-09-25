@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
 import { RentalContract } from '../types';
+import { contractDurationLabel } from './contractStore';
 
 /* -------------------------------------------------------------------------
    عقد الإيجار — القالب الرسمي (أبيض وأسود)
@@ -69,8 +70,8 @@ export const CONTRACT_CLAUSES: { title: string; body: (c: RentalContract) => str
   {
     title: 'البند الثاني — مدة الإيجار',
     body: c =>
-      `تبدأ مدة الإيجار من يوم ${fmtDate(c.start_date)} وتنتهي في يوم ${fmtDate(c.end_date)}` +
-      `${c.nights ? ` (عدد الليالي: ${c.nights})` : ''}، ولا يجوز للطرف الثاني الاستمرار في شغل الوحدة بعد انتهاء هذه المدة ` +
+      `تبدأ مدة الإيجار من يوم ${fmtDate(c.start_date)} وتنتهي في يوم ${fmtDate(c.end_date)}، ` +
+      `ومقدارها ${contractDurationLabel(c)}، ولا يجوز للطرف الثاني الاستمرار في شغل الوحدة بعد انتهاء هذه المدة ` +
       `إلا بموافقة كتابية من الطرف الأول.`,
   },
   {
@@ -95,9 +96,9 @@ export const CONTRACT_CLAUSES: { title: string; body: (c: RentalContract) => str
   },
   {
     title: 'البند السادس — التزامات الطرف الأول',
-    body: c =>
+    body: () =>
       `يلتزم الطرف الأول بتسليم الوحدة للطرف الثاني في التاريخ المتفق عليه وبحالة جيدة صالحة للاستعمال، ` +
-      `وبعدم التعرض له في الانتفاع بها خلال ${c.nights ? `مدة الإيجار المتفق عليها` : 'مدة الإيجار'}، ` +
+      `وبعدم التعرض له في الانتفاع بها خلال مدة الإيجار المتفق عليها، ` +
       `ويكون تسليم الوحدة في نهاية المدة بمجرد انتهائها.`,
   },
   {
@@ -219,7 +220,10 @@ export const buildContractHtml = (contract: RentalContract): string => {
        <table style="width:100%;border-collapse:collapse;font-size:13px;direction:rtl;">
          <tr>${th('الوحدة', '150px')}${td(escapeHtml(contract.unit_name))}${th('النوع', '110px')}${td(escapeHtml(typeLabel(contract.unit_type)))}</tr>
          <tr>${th('القرية', '150px')}${td(escapeHtml(villageLabel(contract.village_name)))}${th('مدة الإيجار', '110px')}${td(
-        `من ${fmtDate(contract.start_date)} إلى ${fmtDate(contract.end_date)}`
+        escapeHtml(contractDurationLabel(contract))
+      )}</tr>
+         <tr>${th('بداية الإيجار', '150px')}${td(fmtDate(contract.start_date))}${th('نهاية الإيجار', '110px')}${td(
+        fmtDate(contract.end_date)
       )}</tr>
        </table>`
     )}

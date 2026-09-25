@@ -137,6 +137,9 @@ export interface ContractLandlord {
   address: string;
 }
 
+// مدة الإيجار في العقد: أيام أو شهور أو سنوات (مفيش "ليالي" في العقد)
+export type ContractDurationMode = 'days' | 'months' | 'years';
+
 export interface RentalContract {
   id: string;
   user_id?: string;
@@ -150,8 +153,9 @@ export interface RentalContract {
   unit_type: string;
   village_name: string;
   start_date: string;        // yyyy-MM-dd (dates only — no times)
-  end_date: string;          // yyyy-MM-dd
-  nights: number;
+  end_date: string;          // yyyy-MM-dd — محسوبة من تاريخ البداية + المدة
+  duration_mode: ContractDurationMode;
+  duration_value: number;    // عدد الأيام / الشهور / السنين
   rent_amount: number;
   deposit_amount: number;
   payment_terms: string;
