@@ -74,7 +74,8 @@ const CustomEvent = ({ event }: EventProps<any>) => {
           {event.title}
         </span>
       </div>
-      <span className="shrink-0 max-w-[45%] truncate text-[9px] font-bold px-1 py-px rounded bg-black/20 dark:bg-black/35 self-start">
+      {/* Unit badge stays small so the tenant name keeps the width */}
+      <span className="shrink-0 max-w-[32%] truncate text-[9px] font-bold px-1 py-px rounded bg-black/20 dark:bg-black/35 self-start">
         {event.desc}
       </span>
     </div>
@@ -304,6 +305,30 @@ export const CalendarView = () => {
   // Independent panes: the weekday row never scrolls, the week grid scrolls under it
   const monthScrollRef = useRef<HTMLDivElement>(null);
   const monthCardRef = useRef<HTMLDivElement>(null);
+
+  // Width of the grid's own vertical scrollbar (0 on overlay-scrollbar systems).
+  // The weekday row is padded by exactly this much so its columns stay aligned with the grid.
+  const [scrollGutter, setScrollGutter] = useState({ size: 0, side: 'right' as 'right' | 'left' });
+
+  useEffect(() => {
+    const read = () => {
+      const pane = monthScrollRef.current;
+      if (!pane) return;
+      const rtlPane = getComputedStyle(pane).direction === 'rtl';
+      setScrollGutter({
+        size: pane.offsetWidth - pane.clientWidth,
+        side: rtlPane ? 'left' : 'right'
+      });
+    };
+    read();
+    window.addEventListener('resize', read);
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(read) : null;
+    if (observer && monthScrollRef.current) observer.observe(monthScrollRef.current);
+    return () => {
+      window.removeEventListener('resize', read);
+      observer?.disconnect();
+    };
+  }, [view]);
 
   // The 7 weekday columns of the visible grid (the localizer always starts the week on Sunday,
   // exactly like react-big-calendar does for this calendar)
@@ -878,11 +903,15 @@ export const CalendarView = () => {
              The weekday row sits OUTSIDE the vertical pane, so it is always stationary and can
              never slide into the date numbers while the month grid scrolls. */
           <div ref={monthCardRef} className="w-full h-full overflow-x-auto overflow-y-hidden rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
-            <div className="flex h-full w-full min-w-[760px] max-w-[1260px] mx-auto flex-col">
-              {/* Stationary weekday names */}
+            <div className="flex h-full w-full min-w-[1300px] max-w-[1540px] mx-auto flex-col">
+              {/* Stationary weekday names — padded by the grid's scrollbar width so the
+                  columns line up exactly with the week rows below */}
               <div
                 dir={(isRTL || calendarCulture === 'ar') ? 'rtl' : 'ltr'}
                 className="rbc-weekday-row shrink-0"
+                style={scrollGutter.side === 'right'
+                  ? { paddingRight: scrollGutter.size }
+                  : { paddingLeft: scrollGutter.size }}
               >
                 {weekDays.map((d, i) => (
                   <div key={i} className="rbc-weekday-cell">
