@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer, ToolbarProps, View, EventProps } from 'react-big-calendar';
 import { format, getDay, addDays, addMonths, endOfMonth, isValid, isWithinInterval } from 'date-fns';
 import { enUS, arSA } from 'date-fns/locale';
@@ -48,31 +48,33 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
-// Custom Event Component for richer, highly legible display — wraps long names downwards
+// Custom Event Component for richer, highly legible display — wraps long names downwards.
+// The name is clamped to 2 lines so a day cell always fits exactly two bars, comfortably.
 const CustomEvent = ({ event }: EventProps<any>) => {
   const b = event.allData;
 
   const StatusIcon = () => {
     switch (event.status) {
-      case BookingStatus.CONFIRMED: return <CheckCircle size={13} strokeWidth={2.5} className="shrink-0 text-white mt-0.5" />;
-      case BookingStatus.PENDING: return <Clock size={13} strokeWidth={2.5} className="shrink-0 text-slate-900 mt-0.5" />;
-      case BookingStatus.CANCELLED: return <XCircle size={13} strokeWidth={2.5} className="shrink-0 text-white mt-0.5" />;
+      case BookingStatus.CONFIRMED: return <CheckCircle size={12} strokeWidth={2.5} className="shrink-0 text-white mt-px" />;
+      case BookingStatus.PENDING: return <Clock size={12} strokeWidth={2.5} className="shrink-0 text-slate-900 mt-px" />;
+      case BookingStatus.CANCELLED: return <XCircle size={12} strokeWidth={2.5} className="shrink-0 text-white mt-px" />;
       default: return null;
     }
   };
 
   return (
     <div
-      className="flex items-start justify-between w-full h-auto py-0.5 px-0.5 gap-1.5 select-none"
+      className="flex items-start justify-between w-full h-auto gap-1 select-none"
       title={`${event.title} • ${event.desc} (${b?.start_date} ➔ ${b?.end_date})`}
     >
       <div className="flex items-start gap-1 min-w-0 flex-1">
         <StatusIcon />
-        <span className="font-extrabold text-xs leading-tight tracking-tight drop-shadow-sm break-words whitespace-normal">
+        {/* break-words + line-clamp: a long tenant name breaks to a 2nd line inside the same label */}
+        <span className="font-bold text-xs leading-tight tracking-tight break-words whitespace-normal line-clamp-2">
           {event.title}
         </span>
       </div>
-      <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/20 dark:bg-black/35 backdrop-blur-sm self-start">
+      <span className="shrink-0 max-w-[45%] truncate text-[9px] font-bold px-1 py-px rounded bg-black/20 dark:bg-black/35 self-start">
         {event.desc}
       </span>
     </div>
@@ -298,6 +300,17 @@ export const CalendarView = () => {
 
   const monthStart = startOfMonth(date);
   const nextMonthStart = startOfMonth(addMonths(date, 1));
+
+  // Independent panes: the weekday row never scrolls, the week grid scrolls under it
+  const monthScrollRef = useRef<HTMLDivElement>(null);
+  const monthCardRef = useRef<HTMLDivElement>(null);
+
+  // The 7 weekday columns of the visible grid (the localizer always starts the week on Sunday,
+  // exactly like react-big-calendar does for this calendar)
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(startOfMonth(date)), i)),
+    [date]
+  );
 
   const targetUnits = useMemo(() => {
     if (filterUnitIds.length > 0) {
@@ -697,7 +710,7 @@ export const CalendarView = () => {
   };
 
   const eventPropGetter = (event: any) => {
-    let className = 'shadow-md border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 transition-all hover:brightness-105 cursor-pointer rounded-xl text-[13.5px] font-bold !p-0.5 ';
+    let className = 'shadow-md border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 transition-colors hover:brightness-105 cursor-pointer rounded-lg font-bold ';
 
     switch (event.status) {
       case BookingStatus.CONFIRMED:
@@ -724,20 +737,33 @@ export const CalendarView = () => {
 
   const navigate = useNavigate();
 
+  // Scroll ONLY the calendar's own panes to today — never the page/other scroll containers,
+  // which is what used to make the whole view jump around.
   const scrollToToday = () => {
     setTimeout(() => {
-      const todayCell = document.querySelector('.rbc-day-bg.rbc-today') || document.querySelector('.rbc-today');
-      if (todayCell) {
-        todayCell.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-          inline: 'center'
-        });
-        todayCell.classList.add('today-pulse-highlight');
-        setTimeout(() => {
-          todayCell.classList.remove('today-pulse-highlight');
-        }, 2500);
+      const todayCell = (document.querySelector('.rbc-day-bg.rbc-today') || document.querySelector('.rbc-today')) as HTMLElement | null;
+      if (!todayCell) return;
+
+      const vPane = monthScrollRef.current;
+      if (vPane) {
+        const paneRect = vPane.getBoundingClientRect();
+        const cellRect = todayCell.getBoundingClientRect();
+        const target = vPane.scrollTop + (cellRect.top - paneRect.top) - (vPane.clientHeight - cellRect.height) / 2;
+        vPane.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
       }
+
+      const hPane = monthCardRef.current;
+      if (hPane && hPane.scrollWidth > hPane.clientWidth) {
+        const paneRect = hPane.getBoundingClientRect();
+        const cellRect = todayCell.getBoundingClientRect();
+        const target = hPane.scrollLeft + (cellRect.left - paneRect.left) - (hPane.clientWidth - cellRect.width) / 2;
+        hPane.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+      }
+
+      todayCell.classList.add('today-pulse-highlight');
+      setTimeout(() => {
+        todayCell.classList.remove('today-pulse-highlight');
+      }, 2500);
     }, 120);
   };
 
@@ -775,19 +801,19 @@ export const CalendarView = () => {
       <div className="shrink-0 z-20 pb-2 border-b border-gray-200/50 dark:border-gray-700/50 mb-3">
         {/* Top Controls Row: Status Legend (ONLY in Month view) on one side + FilterPopover on the other */}
         <div className="w-full flex flex-wrap items-center justify-between gap-2.5 mb-2.5 px-1">
-          {/* Status Legend visible ONLY in Month View — sleek unified segmented container */}
+          {/* Status Legend visible ONLY in Month View — compact segmented container, aligned with the grid */}
           {view === 'month' ? (
-            <div className="flex items-center gap-1.5 p-1 bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-gray-200/70 dark:border-gray-700/60 shadow-xs backdrop-blur-sm">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-900/30 border border-blue-200/60 dark:border-blue-800/40">
-                <span className="w-2 h-2 rounded-full bg-blue-600 shadow-xs animate-pulse"></span>
+            <div className="shrink-0 flex items-center gap-1 p-1 bg-white/90 dark:bg-slate-800/90 rounded-2xl border border-gray-200/70 dark:border-gray-700/60 shadow-xs">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap text-blue-700 dark:text-blue-300 bg-blue-50/80 dark:bg-blue-900/30 border border-blue-200/60 dark:border-blue-800/40">
+                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
                 <span>{language === 'ar' ? 'مؤكد' : 'Confirmed'}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-800/40">
-                <span className="w-2 h-2 rounded-full bg-amber-500 shadow-xs"></span>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap text-amber-700 dark:text-amber-300 bg-amber-50/80 dark:bg-amber-900/30 border border-amber-200/60 dark:border-amber-800/40">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                 <span>{language === 'ar' ? 'غير مؤكد' : 'Pending'}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-800/40">
-                <span className="w-2 h-2 rounded-full bg-rose-500 shadow-xs"></span>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-900/30 border border-rose-200/60 dark:border-rose-800/40">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                 <span>{language === 'ar' ? 'ملغي' : 'Cancelled'}</span>
               </div>
             </div>
@@ -848,29 +874,50 @@ export const CalendarView = () => {
       {/* 2. DEDICATED INDEPENDENT SCROLLABLE BODY AREA */}
       <div className="flex-1 min-h-0 w-full overflow-hidden relative">
         {view === 'month' && (
-          <div className="w-full h-full overflow-auto rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
-            <div className="w-[1365px] min-w-[1365px]">
-              <BigCalendar
-                localizer={localizer}
-                events={events}
-                startAccessor="start"
-                endAccessor="end"
-                rtl={calendarCulture === 'ar'}
-                culture={calendarCulture}
-                messages={messages}
-                formats={formats}
-                toolbar={false}
-                components={{
-                  event: CustomEvent
-                }}
-                view="month"
-                date={date}
-                length={35}
-                eventPropGetter={eventPropGetter}
-                onSelectEvent={handleSelectEvent}
-                popup={false}
-                className="font-sans w-full h-full text-gray-700 dark:text-gray-200"
-              />
+          /* Horizontal pane (weekday row + grid move together sideways) holding a vertical pane.
+             The weekday row sits OUTSIDE the vertical pane, so it is always stationary and can
+             never slide into the date numbers while the month grid scrolls. */
+          <div ref={monthCardRef} className="w-full h-full overflow-x-auto overflow-y-hidden rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
+            <div className="flex h-full w-full min-w-[760px] max-w-[1260px] mx-auto flex-col">
+              {/* Stationary weekday names */}
+              <div
+                dir={(isRTL || calendarCulture === 'ar') ? 'rtl' : 'ltr'}
+                className="rbc-weekday-row shrink-0"
+              >
+                {weekDays.map((d, i) => (
+                  <div key={i} className="rbc-weekday-cell">
+                    {format(d, 'EEEE', { locale: dateLocale })}
+                  </div>
+                ))}
+              </div>
+
+              {/* Weeks grid — scrolls vertically on its own, under the fixed weekday row */}
+              <div
+                ref={monthScrollRef}
+                className="rbc-month-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+              >
+                <BigCalendar
+                  localizer={localizer}
+                  events={events}
+                  startAccessor="start"
+                  endAccessor="end"
+                  rtl={calendarCulture === 'ar'}
+                  culture={calendarCulture}
+                  messages={messages}
+                  formats={formats}
+                  toolbar={false}
+                  components={{
+                    event: CustomEvent
+                  }}
+                  view="month"
+                  date={date}
+                  length={35}
+                  eventPropGetter={eventPropGetter}
+                  onSelectEvent={handleSelectEvent}
+                  popup={false}
+                  className="font-sans w-full text-gray-700 dark:text-gray-200"
+                />
+              </div>
             </div>
           </div>
         )}
