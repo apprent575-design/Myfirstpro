@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { AppState, Language, Theme, Unit, Booking, Expense, User, Subscription, SystemSettings } from '../types';
+import { AppState, Language, Theme, Unit, Booking, Expense, User, Subscription, SystemSettings, RentalContract } from '../types';
 import { TRANSLATIONS } from '../constants';
+import {
+  mergeContractCache,
+  normalizeContractRow,
+  readContractCache,
+  upsertContractCache,
+  removeContractCache
+} from '../utils/contractStore';
 import { addDays, isAfter, differenceInDays, format, isValid } from 'date-fns';
 import { arSA, enUS } from 'date-fns/locale';
 
@@ -41,6 +48,9 @@ interface AppContextType {
   addBooking: (booking: Booking) => Promise<void>;
   updateBooking: (booking: Booking) => Promise<void>;
   deleteBooking: (id: string) => Promise<void>;
+  addContract: (contract: RentalContract) => Promise<void>;
+  updateContract: (contract: RentalContract) => Promise<void>;
+  deleteContract: (id: string) => Promise<void>;
   addExpense: (expense: Expense) => Promise<void>;
   updateExpense: (expense: Expense) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
@@ -116,6 +126,7 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
   const [units, setUnits] = useState<Unit[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [contracts, setContracts] = useState<RentalContract[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
 
@@ -338,13 +349,14 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
     try {
       if (currentUser.email === SUPER_ADMIN_EMAIL || currentUser.role === 'admin') {
         // --- ADMIN FETCH ---
-        const [uRes, bRes, eRes, pRes, sRes, sysRes] = await Promise.all([
+        const [uRes, bRes, eRes, pRes, sRes, sysRes, cRes] = await Promise.all([
           supabase.from('units').select('*'),
           supabase.from('bookings').select('*'),
           supabase.from('expenses').select('*'),
           supabase.from('profiles').select('*'),
           supabase.from('subscriptions').select('*'),
-          supabase.from('system_settings').select('*').eq('id', 'global').maybeSingle()
+          supabase.from('system_settings').select('*').eq('id', 'global').maybeSingle(),
+          supabase.from('contracts').select('*')
         ]);
 
         if (isMounted.current) {
@@ -352,6 +364,15 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
           if (bRes.data) setBookings(bRes.data);
           if (eRes.data) setExpenses(eRes.data);
           if (sysRes.data) setSystemSettings(sysRes.data as SystemSettings);
+          if (cRes.data) {
+            const rows = (cRes.data as any[]).map(normalizeContractRow);
+            setContracts(rows);
+            // النسخة المحلية بتخزّن عقود الحساب الحالي فقط
+            mergeContractCache(currentUser.id, rows.filter(c => c.user_id === currentUser.id));
+          } else {
+            // الجدول لسه ما اتعملش — نعرض العقود المحفوظة على الجهاز
+            setContracts(readContractCache(currentUser.id));
+          }
 
           if (pRes.data) {
             const allSubs = sRes.data || [];
@@ -366,11 +387,12 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
         }
       } else {
         // --- USER FETCH ---
-        const [uRes, bRes, eRes, sRes] = await Promise.all([
+        const [uRes, bRes, eRes, sRes, cRes] = await Promise.all([
           supabase.from('units').select('*').eq('user_id', currentUser.id),
           supabase.from('bookings').select('*').eq('user_id', currentUser.id),
           supabase.from('expenses').select('*').eq('user_id', currentUser.id),
-          supabase.from('subscriptions').select('*').eq('user_id', currentUser.id).maybeSingle()
+          supabase.from('subscriptions').select('*').eq('user_id', currentUser.id).maybeSingle(),
+          supabase.from('contracts').select('*').eq('user_id', currentUser.id)
         ]);
 
         if (isMounted.current) {
@@ -378,6 +400,8 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
           if (bRes.data) setBookings(bRes.data);
           if (eRes.data) setExpenses(eRes.data);
           if (sRes.data) setUser(prev => prev ? { ...prev, subscription: sRes.data as Subscription } : null);
+          if (cRes.data) setContracts(mergeContractCache(currentUser.id, (cRes.data as any[]).map(normalizeContractRow)));
+          else setContracts(readContractCache(currentUser.id));
         }
       }
     } catch (error) {
@@ -411,6 +435,7 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
     setUnits([]);
     setBookings([]);
     setExpenses([]);
+    setContracts([]);
     setAllUsers([]);
 
     // 2. Clear Persistence (Using the project reference ID from your supabase URL)
@@ -554,6 +579,36 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
     if (error && original) setBookings(prev => [...prev, original]);
   };
 
+  // --- Rental contracts (عقود الإيجار) — stored in public.contracts ---
+  const addContract = async (contract: RentalContract) => {
+    checkRestriction();
+    if (!user) throw new Error("User not authenticated");
+    const saved: RentalContract = { ...contract, user_id: user.id, updated_at: new Date().toISOString() };
+    setContracts(prev => [saved, ...prev.filter(c => c.id !== saved.id)]); // Optimistic
+    upsertContractCache(user.id, saved); // نسخة محلية تعمل بدون نت
+    if (!supabase) return;
+    const { error } = await supabase.from('contracts').insert([saved]);
+    if (error) throw error;
+  };
+
+  const updateContract = async (contract: RentalContract) => {
+    const saved: RentalContract = { ...contract, updated_at: new Date().toISOString() };
+    setContracts(prev => prev.map(c => (c.id === saved.id ? saved : c))); // Optimistic
+    upsertContractCache(user?.id || saved.user_id, saved);
+    if (!supabase) return;
+    const { error } = await supabase.from('contracts').update(saved).eq('id', saved.id);
+    if (error) throw error;
+  };
+
+  const deleteContract = async (id: string) => {
+    const original = contracts.find(c => c.id === id);
+    setContracts(prev => prev.filter(c => c.id !== id)); // Optimistic
+    removeContractCache(user?.id || original?.user_id, id);
+    if (!supabase) return;
+    const { error } = await supabase.from('contracts').delete().eq('id', id);
+    if (error && original) setContracts(prev => [...prev, original]);
+  };
+
   const addUnit = async (unit: Unit) => {
     checkRestriction();
     if (!user) throw new Error("User not authenticated");
@@ -606,8 +661,9 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
       language, setLanguage, theme, toggleTheme: () => setTheme(prev => prev === 'light' ? 'dark' : 'light'),
       dateSettings, setDateSettings, dateLocale, formatDate, formatHeaderDate,
       user, login, signup, updatePassword, updateProfile, logout,
-      state: { units, bookings, expenses, allUsers, systemSettings },
+      state: { units, bookings, expenses, contracts, allUsers, systemSettings },
       addBooking, updateBooking, deleteBooking,
+      addContract, updateContract, deleteContract,
       addExpense, updateExpense, deleteExpense,
       addUnit, updateUnit, deleteUnit,
       addAccount, deleteAccount, addSubscription, updateSubscription, deleteSubscription, updateSystemSettings,

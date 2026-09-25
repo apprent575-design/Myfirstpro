@@ -115,10 +115,56 @@ export interface SystemSettings {
 export type Language = 'en' | 'ar';
 export type Theme = 'light' | 'dark';
 
+// --- Rental contract (عقد إيجار) ---
+export type PartyGender = 'male' | 'female';
+
+// Titles offered per gender: male -> السيد / الأستاذ, female -> السيدة / الآنسة / المدام
+export type PartyTitle = 'السيد' | 'الأستاذ' | 'السيدة' | 'الآنسة' | 'المدام';
+
+export interface ContractParty {
+  id: string;
+  gender: PartyGender;
+  title: PartyTitle;
+  name: string;
+  national_id: string;
+  phone: string;
+}
+
+export interface ContractLandlord {
+  name: string;
+  national_id: string;
+  phone: string;
+  address: string;
+}
+
+export interface RentalContract {
+  id: string;
+  user_id?: string;
+  booking_id?: string;
+  unit_id?: string;
+  number: string;            // contract reference, auto from the date + sequence, editable
+  contract_date: string;     // yyyy-MM-dd — auto = today, editable
+  landlord: ContractLandlord;
+  parties: ContractParty[];  // الطرف الثاني — 1 or more tenants
+  unit_name: string;
+  unit_type: string;
+  village_name: string;
+  start_date: string;        // yyyy-MM-dd (dates only — no times)
+  end_date: string;          // yyyy-MM-dd
+  nights: number;
+  rent_amount: number;
+  deposit_amount: number;
+  payment_terms: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AppState {
   units: Unit[];
   bookings: Booking[];
   expenses: Expense[];
+  contracts: RentalContract[];
   // Admin Data
   allUsers: User[];
   systemSettings: SystemSettings | null;

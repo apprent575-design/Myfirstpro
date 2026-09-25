@@ -5,9 +5,10 @@ import { FilterPopover } from './FilterPopover';
 import { MultiSelectBookings } from './MultiSelectBookings';
 import { MultiSelectUnits } from './MultiSelectUnits';
 import { Booking, BookingStatus, PaymentStatus, FeeType } from '../types';
-import { Plus, Edit2, Trash2, FileText, CheckCircle, Clock, XCircle, MessageCircle, Calendar, ThumbsUp, ThumbsDown, AlertTriangle, Loader2, Home, ChevronsRight, Phone } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText, FileSignature, CheckCircle, Clock, XCircle, MessageCircle, Calendar, ThumbsUp, ThumbsDown, AlertTriangle, Loader2, Home, ChevronsRight, Phone } from 'lucide-react';
 import { format, addDays, isWithinInterval, isValid } from 'date-fns';
 import { generateReceipt } from '../utils/pdfGenerator';
+import { ContractModal } from './ContractModal';
 
 const startOfMonth = (date: Date) => {
   const d = new Date(date);
@@ -30,6 +31,7 @@ export const Bookings = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [bookingToDelete, setBookingToDelete] = useState<Booking | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [contractBooking, setContractBooking] = useState<Booking | null>(null);
 
   // UI State
   const [formError, setFormError] = useState<string | null>(null);
@@ -505,6 +507,7 @@ export const Bookings = () => {
 
                 <div className="flex gap-2">
                   <button onClick={() => generateReceipt(booking, unit, language, t)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg" title="Receipt"><FileText size={18} /></button>
+                  <button onClick={() => setContractBooking(booking)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={isRTL ? 'استخراج عقد إيجار' : 'Rental contract'}><FileSignature size={18} /></button>
                   <button onClick={() => handleEdit(booking)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg" title="Edit"><Edit2 size={18} /></button>
                   <button onClick={() => handleDeleteClick(booking)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={18} /></button>
                 </div>
@@ -947,6 +950,15 @@ export const Bookings = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Rental contract (عقد إيجار) — form + archive of this tenant's saved contracts */}
+      {contractBooking && (
+        <ContractModal
+          booking={contractBooking}
+          unit={state.units.find(u => u.id === contractBooking.unit_id)}
+          onClose={() => setContractBooking(null)}
+        />
       )}
     </div>
   );
