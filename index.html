@@ -165,7 +165,9 @@
        row above it (the row gets the same gutter width as padding from the component). */
     .rbc-month-scroll {
       scrollbar-gutter: stable;
-      overscroll-behavior: contain;
+      /* Block vertical over-scroll only — horizontal swipes must reach the pane below */
+      overscroll-behavior-y: contain;
+      overscroll-behavior-x: auto;
     }
 
     .rbc-month-scroll::-webkit-scrollbar {
@@ -191,6 +193,40 @@
 
     .dark .rbc-month-scroll::-webkit-scrollbar-thumb {
       background: #475569;
+      background-clip: content-box;
+    }
+
+    /* Horizontal pane of the month grid (weekday row + weeks). Styling the scrollbar here
+       forces a REAL, always-visible scrollbar: on Windows setups where scrollbars are set to
+       auto-hide, the overlay bar was invisible, so the grid could not be dragged sideways. */
+    .rbc-month-xscroll::-webkit-scrollbar {
+      height: 14px;
+      width: 14px;
+    }
+
+    .rbc-month-xscroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+
+    .rbc-month-xscroll::-webkit-scrollbar-thumb {
+      background: #64748b;
+      border-radius: 8px;
+      border: 3px solid transparent;
+      background-clip: content-box;
+    }
+
+    .rbc-month-xscroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+      background-clip: content-box;
+    }
+
+    .dark .rbc-month-xscroll::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    .dark .rbc-month-xscroll::-webkit-scrollbar-thumb {
+      background: #94a3b8;
       background-clip: content-box;
     }
 

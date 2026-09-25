@@ -330,6 +330,31 @@ export const CalendarView = () => {
     };
   }, [view]);
 
+  // Moving sideways over the grid: Shift + wheel, a trackpad swipe or a tilted wheel scrolls
+  // the month card horizontally. Attached natively (non-passive) so preventDefault works and
+  // the gesture is not handled twice.
+  useEffect(() => {
+    const pane = monthScrollRef.current;
+    if (!pane) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const card = monthCardRef.current;
+      if (!card || card.scrollWidth <= card.clientWidth) return;
+
+      const isHorizontal = e.shiftKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY);
+      if (!isHorizontal) return;
+
+      const dx = e.shiftKey ? e.deltaY : e.deltaX;
+      if (!dx) return;
+
+      e.preventDefault();
+      card.scrollLeft += dx;
+    };
+
+    pane.addEventListener('wheel', onWheel, { passive: false });
+    return () => pane.removeEventListener('wheel', onWheel);
+  }, [view]);
+
   // The 7 weekday columns of the visible grid (the localizer always starts the week on Sunday,
   // exactly like react-big-calendar does for this calendar)
   const weekDays = useMemo(
@@ -902,8 +927,8 @@ export const CalendarView = () => {
           /* Horizontal pane (weekday row + grid move together sideways) holding a vertical pane.
              The weekday row sits OUTSIDE the vertical pane, so it is always stationary and can
              never slide into the date numbers while the month grid scrolls. */
-          <div ref={monthCardRef} className="w-full h-full overflow-x-auto overflow-y-hidden rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
-            <div className="flex h-full w-full min-w-[1300px] max-w-[1540px] mx-auto flex-col">
+          <div ref={monthCardRef} className="rbc-month-xscroll w-full h-full overflow-x-auto overflow-y-hidden rounded-2xl border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-slate-800/40 shadow-inner">
+            <div className="flex h-full w-full min-w-[1600px] max-w-[1900px] mx-auto flex-col">
               {/* Stationary weekday names — padded by the grid's scrollbar width so the
                   columns line up exactly with the week rows below */}
               <div
