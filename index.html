@@ -230,6 +230,38 @@
       background-clip: content-box;
     }
 
+    /* أي جدول عريض جوه الموقع (زي قائمة المنقولات): شريط تمرير أفقي ظاهر دايمًا */
+    .x-scroll::-webkit-scrollbar {
+      height: 14px;
+      width: 14px;
+    }
+
+    .x-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+
+    .x-scroll::-webkit-scrollbar-thumb {
+      background: #64748b;
+      border-radius: 8px;
+      border: 3px solid transparent;
+      background-clip: content-box;
+    }
+
+    .x-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+      background-clip: content-box;
+    }
+
+    .dark .x-scroll::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    .dark .x-scroll::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      background-clip: content-box;
+    }
+
     /* Off-Range (Dates from prev/next month) */
     .rbc-off-range-bg {
       background-color: transparent !important;

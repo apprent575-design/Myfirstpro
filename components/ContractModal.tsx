@@ -40,6 +40,12 @@ const inputClass =
 
 const labelClass = 'block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1';
 
+// أعمدة جدول المنقولات: واسعة عشان النصوص تبان كاملة، والجدول كله بيتمرّر يمين/شمال
+const INVENTORY_COLUMNS = '40px 230px 400px 110px 190px 44px';
+
+const inventoryFieldClass =
+  'w-full p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-[13px] font-semibold leading-relaxed text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-primary-500/40 resize-y min-h-[46px]';
+
 const SectionTitle = ({ children, icon }: { children: React.ReactNode; icon?: React.ReactNode }) => (
   <div className="flex items-center gap-2 mt-6 mb-3 pb-2 border-b border-gray-100 dark:border-gray-700">
     {icon}
@@ -273,7 +279,7 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 md:p-6 animate-in fade-in duration-200">
       <div
         dir={isRTL ? 'rtl' : 'ltr'}
-        className="bg-white dark:bg-slate-900 w-full max-w-3xl max-h-[92vh] rounded-3xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden"
+        className="bg-white dark:bg-slate-900 w-full max-w-6xl max-h-[92vh] rounded-3xl shadow-2xl ring-1 ring-black/5 flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between gap-3 p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-slate-800/60">
@@ -726,88 +732,104 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                   : 'These sections come with every new contract — edit any item, delete a section or item, or add new ones.'}
               </p>
 
-              {draft.inventory.map((section, sIndex) => (
-                <div
-                  key={section.id}
-                  className="mb-3 p-3 rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-slate-800/40"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="w-7 h-7 shrink-0 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300 flex items-center justify-center text-xs font-black">
-                      {sIndex + 1}
-                    </span>
-                    <input
-                      className={`${inputClass} font-bold`}
-                      value={section.title}
-                      onChange={e => patchSection(section.id, { title: e.target.value })}
-                    />
-                    <button
-                      onClick={() => removeSection(section.id)}
-                      className="p-2 shrink-0 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      title={isAr ? 'مسح البند بالكامل' : 'Delete section'}
+              {/* خانات واسعة + تمرير يمين/شمال جوه الجدول */}
+              <div className="x-scroll overflow-x-auto pb-2 rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white dark:bg-slate-900/40">
+                <div className="min-w-[1040px] p-3 space-y-3">
+                  {draft.inventory.map((section, sIndex) => (
+                    <div
+                      key={section.id}
+                      className="p-3 rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-slate-800/40"
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-8 h-8 shrink-0 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300 flex items-center justify-center text-sm font-black">
+                          {sIndex + 1}
+                        </span>
+                        <input
+                          className={`${inputClass} font-bold`}
+                          value={section.title}
+                          onChange={e => patchSection(section.id, { title: e.target.value })}
+                        />
+                        <button
+                          onClick={() => removeSection(section.id)}
+                          className="p-2.5 shrink-0 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          title={isAr ? 'مسح البند بالكامل' : 'Delete section'}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
 
-                  <div className="grid grid-cols-12 gap-1.5 mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">
-                    <div className="col-span-1 text-center">م</div>
-                    <div className="col-span-3">{section.nameHeader}</div>
-                    <div className="col-span-4">{section.specsHeader}</div>
-                    <div className="col-span-1 text-center">{section.countHeader}</div>
-                    <div className="col-span-2">{section.conditionHeader}</div>
-                    <div className="col-span-1" />
-                  </div>
-
-                  {section.items.map((item, iIndex) => (
-                    <div key={item.id} className="grid grid-cols-12 gap-1.5 mb-1.5 items-center">
-                      <div className="col-span-1 text-center text-[11px] font-bold text-gray-500">{iIndex + 1}</div>
-                      <input
-                        className={`${inputClass} col-span-3 !p-2 text-xs`}
-                        value={item.name}
-                        onChange={e => patchItem(section.id, item.id, { name: e.target.value })}
-                      />
-                      <input
-                        className={`${inputClass} col-span-4 !p-2 text-xs`}
-                        value={item.specs}
-                        onChange={e => patchItem(section.id, item.id, { specs: e.target.value })}
-                      />
-                      <input
-                        className={`${inputClass} col-span-1 !p-2 text-xs text-center`}
-                        value={item.count}
-                        onChange={e => patchItem(section.id, item.id, { count: e.target.value })}
-                      />
-                      <input
-                        className={`${inputClass} col-span-2 !p-2 text-xs`}
-                        value={item.condition}
-                        onChange={e => patchItem(section.id, item.id, { condition: e.target.value })}
-                      />
-                      <button
-                        onClick={() => removeItem(section.id, item.id)}
-                        className="col-span-1 p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        title={isAr ? 'مسح المنقول' : 'Delete item'}
+                      <div
+                        className="grid gap-2 mb-2 text-[11px] font-bold text-gray-500 dark:text-gray-400"
+                        style={{ gridTemplateColumns: INVENTORY_COLUMNS }}
                       >
-                        <X size={14} />
+                        <div className="text-center">م</div>
+                        <div>{section.nameHeader}</div>
+                        <div>{section.specsHeader}</div>
+                        <div className="text-center">{section.countHeader}</div>
+                        <div>{section.conditionHeader}</div>
+                        <div />
+                      </div>
+
+                      {section.items.map((item, iIndex) => (
+                        <div
+                          key={item.id}
+                          className="grid gap-2 mb-2 items-start"
+                          style={{ gridTemplateColumns: INVENTORY_COLUMNS }}
+                        >
+                          <div className="text-center text-xs font-bold text-gray-500 pt-3">{iIndex + 1}</div>
+                          <textarea
+                            rows={2}
+                            className={inventoryFieldClass}
+                            value={item.name}
+                            onChange={e => patchItem(section.id, item.id, { name: e.target.value })}
+                          />
+                          <textarea
+                            rows={2}
+                            className={inventoryFieldClass}
+                            value={item.specs}
+                            onChange={e => patchItem(section.id, item.id, { specs: e.target.value })}
+                          />
+                          <textarea
+                            rows={2}
+                            className={`${inventoryFieldClass} text-center`}
+                            value={item.count}
+                            onChange={e => patchItem(section.id, item.id, { count: e.target.value })}
+                          />
+                          <textarea
+                            rows={2}
+                            className={inventoryFieldClass}
+                            value={item.condition}
+                            onChange={e => patchItem(section.id, item.id, { condition: e.target.value })}
+                          />
+                          <button
+                            onClick={() => removeItem(section.id, item.id)}
+                            className="p-2 mt-1 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            title={isAr ? 'مسح المنقول' : 'Delete item'}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => addItem(section.id)}
+                        className="w-full mt-1 py-2.5 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Plus size={15} />
+                        {isAr ? 'إضافة منقول للبند' : 'Add item'}
                       </button>
                     </div>
                   ))}
 
                   <button
-                    onClick={() => addItem(section.id)}
-                    className="w-full mt-1 py-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-[11px] font-bold text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors flex items-center justify-center gap-1.5"
+                    onClick={addSection}
+                    className="w-full py-3 rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-900/50 text-sm font-bold text-primary-600 dark:text-primary-300 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors flex items-center justify-center gap-2"
                   >
-                    <Plus size={14} />
-                    {isAr ? 'إضافة منقول للبند' : 'Add item'}
+                    <Plus size={18} />
+                    {isAr ? 'إضافة بند جديد للقائمة' : 'Add new section'}
                   </button>
                 </div>
-              ))}
-
-              <button
-                onClick={addSection}
-                className="w-full py-2.5 rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-900/50 text-xs font-bold text-primary-600 dark:text-primary-300 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors flex items-center justify-center gap-2"
-              >
-                <Plus size={16} />
-                {isAr ? 'إضافة بند جديد للقائمة' : 'Add new section'}
-              </button>
+              </div>
                 </>
               )}
 
