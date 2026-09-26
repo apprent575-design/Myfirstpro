@@ -133,8 +133,28 @@ export interface ContractParty {
 export interface ContractLandlord {
   name: string;
   national_id: string;
+  nationality: string;
   phone: string;
   address: string;
+}
+
+// قائمة المنقولات (ملحق العقد) — بند فيه منقولات، وكل منقول له اسم/مواصفات/عدد/حالة
+export interface ContractInventoryItem {
+  id: string;
+  name: string;
+  specs: string;
+  count: string;
+  condition: string;
+}
+
+export interface ContractInventorySection {
+  id: string;
+  title: string;
+  nameHeader: string;
+  specsHeader: string;
+  countHeader: string;
+  conditionHeader: string;
+  items: ContractInventoryItem[];
 }
 
 // مدة الإيجار في العقد: أيام أو شهور أو سنوات (مفيش "ليالي" في العقد)
@@ -152,10 +172,14 @@ export interface RentalContract {
   unit_name: string;
   unit_type: string;
   village_name: string;
+  unit_phase: string;        // المرحلة (مثال: المرحلة الأولى)
   start_date: string;        // yyyy-MM-dd (dates only — no times)
   end_date: string;          // yyyy-MM-dd — محسوبة من تاريخ البداية + المدة
   duration_mode: ContractDurationMode;
   duration_value: number;    // عدد الأيام / الشهور / السنين
+  inventory: ContractInventorySection[];  // ملحق قائمة المنقولات
+  inventory_enabled: boolean;             // تفعيل/إلغاء قائمة المنقولات في العقد
+  inventory_value: number;   // قيمة المنقولات الإجمالية
   rent_amount: number;
   deposit_amount: number;
   payment_terms: string;

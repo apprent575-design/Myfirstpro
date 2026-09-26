@@ -8,6 +8,7 @@ import { Expense } from '../types';
 import { Plus, Download, Calendar, Edit2, Trash2, Check, X, AlertTriangle, Loader2, ChevronsRight } from 'lucide-react';
 import { format, isWithinInterval, isValid } from 'date-fns';
 import { generateExpenseReport } from '../utils/pdfGenerator';
+import { NumberInput } from './NumberInput';
 
 // Manual startOfMonth helpers
 const startOfMonth = (date: Date) => {
@@ -404,11 +405,17 @@ export const Expenses = () => {
                 </div>
                 <div className="space-y-1 md:col-span-3">
                   <label className="text-xs font-bold text-gray-500 uppercase">{t('amount')} ({t('currency')})</label>
-                  <input required type="number" min="0" step="any" className={`${inputStyle} border-gray-200 font-bold`} value={item.amount || ''} onChange={e => {
-                    const newItems = [...expenseItems];
-                    newItems[index].amount = parseFloat(e.target.value) || 0;
-                    setExpenseItems(newItems);
-                  }} />
+                  <NumberInput
+                    required
+                    min={0}
+                    className={`${inputStyle} border-gray-200 font-bold`}
+                    value={item.amount || 0}
+                    onChange={amount => {
+                      const newItems = [...expenseItems];
+                      newItems[index].amount = amount;
+                      setExpenseItems(newItems);
+                    }}
+                  />
                 </div>
 
                 {(index > 0 || !editingId) && expenseItems.length > 1 && (

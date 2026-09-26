@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Subscription, User } from '../types';
+import { NumberInput } from './NumberInput';
 import { addDays, format, differenceInDays, isValid } from 'date-fns';
 import { Search, Calendar, Trash2, Edit2, Download, PauseCircle, PlayCircle, Loader2, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { generateSubscriptionReceipt } from '../utils/pdfGenerator';
@@ -318,20 +319,19 @@ export const AdminSubscriptions = () => {
                             <div className="flex gap-4">
                                 <div className="flex-1 space-y-2">
                                     <label className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase block text-right tracking-wider">{t('subscriptionPrice')}</label>
-                                    <input
-                                        type="number"
+                                    <NumberInput
                                         className="w-full p-4 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white font-bold outline-none border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 text-center"
-                                        value={formData.price}
-                                        onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
+                                        value={formData.price || 0}
+                                        onChange={price => setFormData({ ...formData, price })}
                                     />
                                 </div>
                                 <div className="flex-1 space-y-2">
                                     <label className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase block text-right tracking-wider">{t('durationDays')}</label>
-                                    <input
-                                        type="number"
+                                    <NumberInput
+                                        allowDecimal={false}
                                         className="w-full p-4 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white font-bold outline-none border border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 text-center"
-                                        value={formData.duration}
-                                        onChange={e => setFormData({ ...formData, duration: Number(e.target.value) })}
+                                        value={formData.duration || 0}
+                                        onChange={duration => setFormData({ ...formData, duration })}
                                     />
                                 </div>
                             </div>

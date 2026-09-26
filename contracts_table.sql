@@ -10,16 +10,20 @@ create table if not exists public.contracts (
   unit_id uuid references public.units(id) on delete set null,
   number text,
   contract_date date,
-  landlord jsonb default '{}'::jsonb,   -- { name, national_id, phone, address }
+  landlord jsonb default '{}'::jsonb,   -- { name, national_id, nationality, phone, address }
   parties jsonb default '[]'::jsonb,    -- [{ id, gender, title, name, national_id, phone }]
   unit_name text,
   unit_type text,
   village_name text,
+  unit_phase text,                      -- المرحلة (مثال: المرحلة الأولى)
   start_date date,
   end_date date,
-  nights integer default 0,          -- قديم: للتوافق مع العقود المحفوظة قبل التعديل
-  duration_mode text default 'days', -- 'days' | 'months' | 'years'
-  duration_value integer default 0,  -- عدد الأيام / الشهور / السنوات
+  nights integer default 0,             -- قديم: للتوافق مع العقود المحفوظة قبل التعديل
+  duration_mode text default 'days',    -- 'days' | 'months' | 'years'
+  duration_value integer default 0,     -- عدد الأيام / الشهور / السنوات
+  inventory jsonb default '[]'::jsonb,  -- ملحق قائمة المنقولات (بنود + منقولات)
+  inventory_enabled boolean default true, -- تفعيل/إلغاء قائمة المنقولات في العقد
+  inventory_value numeric default 0,    -- قيمة المنقولات الإجمالية
   rent_amount numeric default 0,
   deposit_amount numeric default 0,
   payment_terms text,
@@ -59,10 +63,17 @@ create index if not exists contracts_booking_id_idx on public.contracts (booking
 
 -- ============================================================
 --  لو الجدول كان اتعمل قبل كده (نسخة قديمة): الأعمدة الجديدة تتضاف بأمان
---  المدة في العقد بقت (أيام / شهور / سنوات) بدل الليالي
+--  المدة (أيام/شهور/سنوات) + ملحق قائمة المنقولات + زرار تفعيل/إلغاء القائمة
 -- ============================================================
 alter table public.contracts add column if not exists duration_mode text default 'days';
 alter table public.contracts add column if not exists duration_value integer default 0;
+alter table public.contracts add column if not exists unit_phase text;
+alter table public.contracts add column if not exists inventory jsonb default '[]'::jsonb;
+alter table public.contracts add column if not exists inventory_enabled boolean default true;
+alter table public.contracts add column if not exists inventory_value numeric default 0;
+
+-- العقود القديمة: قائمة المنقولات مفعّلة افتراضيًا
+update public.contracts set inventory_enabled = true where inventory_enabled is null;
 
 -- تحويل العقود القديمة المحفوظة بالليالي إلى أيام
 update public.contracts
@@ -70,4 +81,3 @@ update public.contracts
        duration_value = nights
  where (duration_value is null or duration_value = 0)
    and coalesce(nights, 0) > 0;
-

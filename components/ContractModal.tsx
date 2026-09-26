@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Booking, ContractDurationMode, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
+import { Booking, ContractDurationMode, ContractInventoryItem, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
 import {
   buildContractDefaults,
   contractDurationLabel,
@@ -11,7 +11,9 @@ import {
   titleForGender,
   titlesForGender,
 } from '../utils/contractStore';
+import { createInventoryItem, createInventorySection } from '../utils/contractInventory';
 import { generateContractPdf } from '../utils/contractGenerator';
+import { NumberInput } from './NumberInput';
 import {
   FileSignature,
   Download,
@@ -24,6 +26,7 @@ import {
   Loader2,
   AlertTriangle,
   Users,
+  ClipboardList,
 } from 'lucide-react';
 
 interface ContractModalProps {
@@ -125,6 +128,60 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
     setDraft(prev =>
       prev && prev.parties.length > 1
         ? { ...prev, parties: prev.parties.filter(p => p.id !== id) }
+        : prev
+    );
+
+  // ---------- قائمة المنقولات (ملحق العقد) ----------
+  const patchSection = (sectionId: string, updates: Partial<RentalContract['inventory'][number]>) =>
+    setDraft(prev =>
+      prev
+        ? { ...prev, inventory: prev.inventory.map(s => (s.id === sectionId ? { ...s, ...updates } : s)) }
+        : prev
+    );
+
+  const addSection = () =>
+    setDraft(prev =>
+      prev
+        ? { ...prev, inventory: [...prev.inventory, createInventorySection({ title: 'بند جديد' }, [createInventoryItem()])] }
+        : prev
+    );
+
+  const removeSection = (sectionId: string) =>
+    setDraft(prev => (prev ? { ...prev, inventory: prev.inventory.filter(s => s.id !== sectionId) } : prev));
+
+  const patchItem = (sectionId: string, itemId: string, updates: Partial<ContractInventoryItem>) =>
+    setDraft(prev =>
+      prev
+        ? {
+            ...prev,
+            inventory: prev.inventory.map(s =>
+              s.id === sectionId ? { ...s, items: s.items.map(i => (i.id === itemId ? { ...i, ...updates } : i)) } : s
+            ),
+          }
+        : prev
+    );
+
+  const addItem = (sectionId: string) =>
+    setDraft(prev =>
+      prev
+        ? {
+            ...prev,
+            inventory: prev.inventory.map(s =>
+              s.id === sectionId ? { ...s, items: [...s.items, createInventoryItem()] } : s
+            ),
+          }
+        : prev
+    );
+
+  const removeItem = (sectionId: string, itemId: string) =>
+    setDraft(prev =>
+      prev
+        ? {
+            ...prev,
+            inventory: prev.inventory.map(s =>
+              s.id === sectionId ? { ...s, items: s.items.filter(i => i.id !== itemId) } : s
+            ),
+          }
         : prev
     );
 
@@ -410,6 +467,10 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                   />
                 </div>
                 <div>
+                  <label className={labelClass}>{isAr ? 'الجنسية' : 'Nationality'}</label>
+                  <input className={inputClass} value={draft.landlord.nationality} onChange={e => patchLandlord({ nationality: e.target.value })} />
+                </div>
+                <div>
                   <label className={labelClass}>{isAr ? 'رقم الهاتف' : 'Phone'}</label>
                   <input
                     className={inputClass}
@@ -542,6 +603,10 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                   <input className={inputClass} value={draft.village_name} onChange={e => patch({ village_name: e.target.value })} />
                 </div>
                 <div>
+                  <label className={labelClass}>{isAr ? 'المرحلة' : 'Phase'}</label>
+                  <input className={inputClass} value={draft.unit_phase} onChange={e => patch({ unit_phase: e.target.value })} />
+                </div>
+                <div>
                   <label className={labelClass}>{isAr ? 'بداية الإيجار' : 'Rental start'}</label>
                   <input
                     type="date"
@@ -584,12 +649,12 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                         ? (isAr ? 'عدد الشهور' : 'Number of months')
                         : (isAr ? 'عدد السنوات' : 'Number of years')}
                   </label>
-                  <input
-                    type="number"
-                    min={1}
+                  <NumberInput
                     className={inputClass}
+                    min={1}
+                    allowDecimal={false}
                     value={draft.duration_value}
-                    onChange={e => patch({ duration_value: Math.max(0, Number(e.target.value) || 0) })}
+                    onChange={duration_value => patch({ duration_value })}
                   />
                 </div>
                 <div>
@@ -609,6 +674,143 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                 )}
               </div>
 
+              {/* قائمة المنقولات (ملحق العقد) */}
+              <SectionTitle icon={<ClipboardList size={16} className="text-primary-500" />}>
+                {isAr
+                  ? `قائمة المنقولات (${draft.inventory.reduce((sum, s) => sum + s.items.length, 0)} منقول)`
+                  : `Inventory list (${draft.inventory.reduce((sum, s) => sum + s.items.length, 0)} items)`}
+              </SectionTitle>
+
+              {/* زرار تفعيل/إلغاء قائمة المنقولات في العقد */}
+              <div
+                className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl border ${
+                  draft.inventory_enabled
+                    ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-900/50'
+                    : 'bg-gray-100/70 dark:bg-slate-800/60 border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                <span
+                  className={`text-xs font-bold ${
+                    draft.inventory_enabled
+                      ? 'text-emerald-800 dark:text-emerald-200'
+                      : 'text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  {draft.inventory_enabled
+                    ? isAr
+                      ? 'قائمة المنقولات مفعّلة — هتتطبع كملحق في العقد.'
+                      : 'Inventory is enabled — it prints as an annex in the contract.'
+                    : isAr
+                      ? 'قائمة المنقولات مقفولة — مش هتظهر في العقد خالص.'
+                      : 'Inventory is disabled — it will not appear in the contract.'}
+                </span>
+                <button
+                  onClick={() => patch({ inventory_enabled: !draft.inventory_enabled })}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                    draft.inventory_enabled
+                      ? 'bg-white dark:bg-slate-800 text-red-600 border border-red-200 dark:border-red-900/50 hover:bg-red-50'
+                      : 'bg-primary-600 text-white shadow-lg shadow-primary-600/30 hover:bg-primary-700'
+                  }`}
+                >
+                  {draft.inventory_enabled
+                    ? (isAr ? 'إلغاء قائمة المنقولات' : 'Disable inventory')
+                    : (isAr ? 'تفعيل قائمة المنقولات' : 'Enable inventory')}
+                </button>
+              </div>
+
+              {draft.inventory_enabled && (
+                <>
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                {isAr
+                  ? 'البنود دي محفوظة أوتوماتيك في كل عقد جديد — تقدر تعدّل أي منقول، أو تمسح بند/منقول، أو تزوّد بنود ومنقولات جديدة.'
+                  : 'These sections come with every new contract — edit any item, delete a section or item, or add new ones.'}
+              </p>
+
+              {draft.inventory.map((section, sIndex) => (
+                <div
+                  key={section.id}
+                  className="mb-3 p-3 rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-slate-800/40"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-7 h-7 shrink-0 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300 flex items-center justify-center text-xs font-black">
+                      {sIndex + 1}
+                    </span>
+                    <input
+                      className={`${inputClass} font-bold`}
+                      value={section.title}
+                      onChange={e => patchSection(section.id, { title: e.target.value })}
+                    />
+                    <button
+                      onClick={() => removeSection(section.id)}
+                      className="p-2 shrink-0 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      title={isAr ? 'مسح البند بالكامل' : 'Delete section'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-12 gap-1.5 mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                    <div className="col-span-1 text-center">م</div>
+                    <div className="col-span-3">{section.nameHeader}</div>
+                    <div className="col-span-4">{section.specsHeader}</div>
+                    <div className="col-span-1 text-center">{section.countHeader}</div>
+                    <div className="col-span-2">{section.conditionHeader}</div>
+                    <div className="col-span-1" />
+                  </div>
+
+                  {section.items.map((item, iIndex) => (
+                    <div key={item.id} className="grid grid-cols-12 gap-1.5 mb-1.5 items-center">
+                      <div className="col-span-1 text-center text-[11px] font-bold text-gray-500">{iIndex + 1}</div>
+                      <input
+                        className={`${inputClass} col-span-3 !p-2 text-xs`}
+                        value={item.name}
+                        onChange={e => patchItem(section.id, item.id, { name: e.target.value })}
+                      />
+                      <input
+                        className={`${inputClass} col-span-4 !p-2 text-xs`}
+                        value={item.specs}
+                        onChange={e => patchItem(section.id, item.id, { specs: e.target.value })}
+                      />
+                      <input
+                        className={`${inputClass} col-span-1 !p-2 text-xs text-center`}
+                        value={item.count}
+                        onChange={e => patchItem(section.id, item.id, { count: e.target.value })}
+                      />
+                      <input
+                        className={`${inputClass} col-span-2 !p-2 text-xs`}
+                        value={item.condition}
+                        onChange={e => patchItem(section.id, item.id, { condition: e.target.value })}
+                      />
+                      <button
+                        onClick={() => removeItem(section.id, item.id)}
+                        className="col-span-1 p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        title={isAr ? 'مسح المنقول' : 'Delete item'}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={() => addItem(section.id)}
+                    className="w-full mt-1 py-2 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-[11px] font-bold text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Plus size={14} />
+                    {isAr ? 'إضافة منقول للبند' : 'Add item'}
+                  </button>
+                </div>
+              ))}
+
+              <button
+                onClick={addSection}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-primary-200 dark:border-primary-900/50 text-xs font-bold text-primary-600 dark:text-primary-300 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus size={16} />
+                {isAr ? 'إضافة بند جديد للقائمة' : 'Add new section'}
+              </button>
+                </>
+              )}
+
               {/* Amounts */}
               <SectionTitle icon={<FileSignature size={16} className="text-primary-500" />}>
                 {isAr ? 'القيمة الإيجارية والتأمين' : 'Rent & deposit'}
@@ -616,24 +818,30 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
                   <label className={labelClass}>{isAr ? 'قيمة الإيجار (ج.م)' : 'Rent amount (EGP)'}</label>
-                  <input
-                    type="number"
-                    min={0}
+                  <NumberInput
                     className={inputClass}
                     value={draft.rent_amount}
-                    onChange={e => patch({ rent_amount: Number(e.target.value) || 0 })}
+                    onChange={rent_amount => patch({ rent_amount })}
                   />
                 </div>
                 <div>
                   <label className={labelClass}>{isAr ? 'مبلغ التأمين (ج.م)' : 'Deposit (EGP)'}</label>
-                  <input
-                    type="number"
-                    min={0}
+                  <NumberInput
                     className={inputClass}
                     value={draft.deposit_amount}
-                    onChange={e => patch({ deposit_amount: Number(e.target.value) || 0 })}
+                    onChange={deposit_amount => patch({ deposit_amount })}
                   />
                 </div>
+                {draft.inventory_enabled && (
+                  <div>
+                    <label className={labelClass}>{isAr ? 'قيمة المنقولات (ج.م)' : 'Inventory value (EGP)'}</label>
+                    <NumberInput
+                      className={inputClass}
+                      value={draft.inventory_value}
+                      onChange={inventory_value => patch({ inventory_value })}
+                    />
+                  </div>
+                )}
                 <div className="md:col-span-3">
                   <label className={labelClass}>{isAr ? 'طريقة السداد' : 'Payment terms'}</label>
                   <input className={inputClass} value={draft.payment_terms} onChange={e => patch({ payment_terms: e.target.value })} />

@@ -9,6 +9,7 @@ import {
   Unit,
   User
 } from '../types';
+import { buildDefaultInventory, normalizeInventory } from './contractInventory';
 
 /* -------------------------------------------------------------------------
    عقود الإيجار: أدوات الكارت + نسخة محلية (cache) من العقود
@@ -177,6 +178,7 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   landlord: {
     name: row?.landlord?.name || '',
     national_id: row?.landlord?.national_id || '',
+    nationality: row?.landlord?.nationality || '',
     phone: row?.landlord?.phone || '',
     address: row?.landlord?.address || '',
   },
@@ -195,10 +197,14 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   unit_name: row?.unit_name || '',
   unit_type: row?.unit_type || '',
   village_name: row?.village_name || '',
+  unit_phase: row?.unit_phase || '',
   start_date: String(row?.start_date || '').slice(0, 10),
   end_date: String(row?.end_date || '').slice(0, 10),
   duration_mode: normalizeDurationMode(row?.duration_mode),
   duration_value: Number(row?.duration_value) || legacyDurationValue(row),
+  inventory: Array.isArray(row?.inventory) && row.inventory.length ? normalizeInventory(row.inventory) : buildDefaultInventory(),
+  inventory_enabled: row?.inventory_enabled === undefined || row?.inventory_enabled === null ? true : Boolean(row.inventory_enabled),
+  inventory_value: Number(row?.inventory_value) || 0,
   rent_amount: Number(row?.rent_amount) || 0,
   deposit_amount: Number(row?.deposit_amount) || 0,
   payment_terms: row?.payment_terms || '',
@@ -283,6 +289,7 @@ export const buildContractDefaults = (
     landlord: {
       name: user?.full_name || '',
       national_id: '',
+      nationality: 'مصري',
       phone: user?.phone || '',
       address: '',
     },
@@ -290,10 +297,14 @@ export const buildContractDefaults = (
     unit_name: unit?.name || '',
     unit_type: unit?.type || '',
     village_name: unit?.village_name_ar || unit?.village_name_en || '',
+    unit_phase: '',
     start_date: booking.start_date,
     end_date: contractEndDate(booking.start_date, durationMode, durationValue) || booking.end_date,
     duration_mode: durationMode,
     duration_value: durationValue,
+    inventory: buildDefaultInventory(),
+    inventory_enabled: true,
+    inventory_value: 0,
     rent_amount: booking.total_rental_price || 0,
     deposit_amount:
       (booking.security_deposit_enabled ? booking.security_deposit : booking.deposit_amount) || 0,

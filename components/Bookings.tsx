@@ -9,6 +9,10 @@ import { Plus, Edit2, Trash2, FileText, FileSignature, CheckCircle, Clock, XCirc
 import { format, addDays, isWithinInterval, isValid } from 'date-fns';
 import { generateReceipt } from '../utils/pdfGenerator';
 import { ContractModal } from './ContractModal';
+import { NumberInput } from './NumberInput';
+
+const numberFieldClass =
+  'w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none';
 
 const startOfMonth = (date: Date) => {
   const d = new Date(date);
@@ -685,12 +689,13 @@ export const Bookings = () => {
                 {/* Nights */}
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('nights')}</label>
-                  <input
-                    type="number"
-                    min="1"
+                  <NumberInput
+                    required
+                    min={1}
+                    allowDecimal={false}
                     className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.nights}
-                    onChange={e => setFormData({ ...formData, nights: parseInt(e.target.value) })}
+                    value={formData.nights || 0}
+                    onChange={nights => setFormData({ ...formData, nights })}
                   />
                 </div>
               </div>
@@ -768,20 +773,18 @@ export const Bookings = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('nightlyRate')}</label>
-                  <input
-                    type="number"
-                    className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.nightly_rate}
-                    onChange={e => setFormData({ ...formData, nightly_rate: parseFloat(e.target.value) })}
+                  <NumberInput
+                    className={numberFieldClass}
+                    value={formData.nightly_rate || 0}
+                    onChange={nightly_rate => setFormData({ ...formData, nightly_rate })}
                   />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('villageFee')} <span className="text-xs font-normal text-gray-500">(Optional)</span></label>
-                  <input
-                    type="number"
-                    className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.village_fee}
-                    onChange={e => setFormData({ ...formData, village_fee: parseFloat(e.target.value) })}
+                  <NumberInput
+                    className={numberFieldClass}
+                    value={formData.village_fee || 0}
+                    onChange={village_fee => setFormData({ ...formData, village_fee })}
                   />
                 </div>
               </div>
@@ -798,12 +801,11 @@ export const Bookings = () => {
                   />
                 </div>
                 {formData.housekeeping_enabled && (
-                  <input
-                    type="number"
+                  <NumberInput
                     placeholder="Housekeeping Price"
                     className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 animate-in fade-in slide-in-from-top-2"
-                    value={formData.housekeeping_price || ''}
-                    onChange={e => setFormData({ ...formData, housekeeping_price: parseFloat(e.target.value) })}
+                    value={formData.housekeeping_price || 0}
+                    onChange={housekeeping_price => setFormData({ ...formData, housekeeping_price })}
                   />
                 )}
 
@@ -839,13 +841,11 @@ export const Bookings = () => {
                 <div className="grid md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="space-y-4">
                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">الديبوزت (Advance Deposit)</label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                      value={formData.deposit_amount || ''}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value) || 0;
+                    <NumberInput
+                      emptyLabel="0"
+                      className={numberFieldClass}
+                      value={formData.deposit_amount || 0}
+                      onChange={val => {
                         setFormData({
                           ...formData,
                           deposit_amount: val,
@@ -866,12 +866,11 @@ export const Bookings = () => {
                       />
                     </div>
                     {formData.security_deposit_enabled && (
-                      <input
-                        type="number"
+                      <NumberInput
                         placeholder="Security Deposit Amount"
                         className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none animate-in fade-in"
-                        value={formData.security_deposit || ''}
-                        onChange={e => setFormData({ ...formData, security_deposit: parseFloat(e.target.value) || 0 })}
+                        value={formData.security_deposit || 0}
+                        onChange={security_deposit => setFormData({ ...formData, security_deposit })}
                       />
                     )}
                   </div>
