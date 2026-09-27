@@ -22,6 +22,10 @@ export enum FeeType {
   TENANT_PAYS = 'TENANT_PAYS'
 }
 
+// نظام الإيجار: بالليلة (الافتراضي) أو بالشهر/السنة
+export type RentalMode = 'nightly' | 'monthly';
+export type PeriodUnit = 'months' | 'years';
+
 export interface Unit {
   id: string;
   user_id?: string; // Owner
@@ -62,6 +66,12 @@ export interface Booking {
   handler_enabled?: boolean;
   handler_name?: string;
   handler_phone?: string;
+
+  // --- نظام الإيجار بالشهر / بالسنة (اختياري) ---
+  rental_mode?: RentalMode;   // 'nightly' (الافتراضي) أو 'monthly'
+  period_unit?: PeriodUnit;   // في النظام الشهري: شهور أو سنين
+  period_count?: number;      // عدد الشهور / السنين
+  period_rate?: number;       // سعر الشهر / السنة
 }
 
 export interface Expense {

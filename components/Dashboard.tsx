@@ -6,6 +6,7 @@ import { isValid, addDays, isAfter, differenceInDays, isWithinInterval, startOfM
 import { useNavigate } from 'react-router-dom';
 import { FilterPopover } from './FilterPopover';
 import { MultiSelectUnits } from './MultiSelectUnits';
+import { bookingFeeDeduction } from '../utils/bookingMath';
 
 const StatCard = ({ title, value, icon: Icon, gradient, trend, onClick }: any) => (
     <div onClick={onClick} className={`relative overflow-hidden rounded-3xl p-6 shadow-lg transition-all border border-white/20 ${gradient} ${onClick ? 'cursor-pointer hover:-translate-y-2 hover:shadow-2xl' : 'hover:-translate-y-1 hover:shadow-xl'}`}>
@@ -256,7 +257,7 @@ export const Dashboard = () => {
         .reduce((sum, b) => {
             const collectedRevenue = b.payment_status === 'Paid' ? (b.total_rental_price || 0) : (b.deposit_enabled ? (b.deposit_amount || 0) : 0);
             const hk = b.housekeeping_enabled ? (b.housekeeping_price || 0) : 0;
-            const deductedFees = b.fee_type === 'TENANT_PAYS' ? 0 : ((b.village_fee || 0) * (b.nights || 0));
+            const deductedFees = bookingFeeDeduction(b);
             return sum + (collectedRevenue - hk - deductedFees);
         }, 0) - totalExpenses;
 

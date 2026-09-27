@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Booking, Unit, Expense, Language, BookingStatus, FeeType, User, Subscription } from '../types';
 import { format, addDays, isAfter, differenceInDays, isWithinInterval } from 'date-fns';
+import { bookingDays, bookingFeeDeduction, bookingPeriodLabel, bookingRentTotal, bookingVillageFees, isMonthlyBooking, periodUnitOf, periodCount, periodRate } from './bookingMath';
 
 // Helper functions to replace date-fns imports that might be missing in specific environments
 const parseISO = (dateStr: string) => new Date(dateStr);
@@ -181,10 +182,11 @@ export const generateReceipt = async (booking: Booking, unit: Unit | undefined, 
     };
 
     // Calculations
-    const baseTotal = booking.nightly_rate * booking.nights;
-    const villageFeesTotal = (booking.village_fee || 0) * booking.nights;
+    const monthly = isMonthlyBooking(booking);
+    const baseTotal = monthly ? bookingRentTotal(booking) : (booking.nightly_rate * booking.nights);
+    const villageFeesTotal = monthly ? 0 : (booking.village_fee || 0) * booking.nights;
     const housekeeping = booking.housekeeping_enabled ? (booking.housekeeping_price || 0) : 0;
-    const subtotal = baseTotal + villageFeesTotal + housekeeping;
+    const subtotal = monthly ? (baseTotal + housekeeping) : (baseTotal + villageFeesTotal + housekeeping);
     const advanceDeposit = booking.deposit_enabled ? (booking.deposit_amount || 0) : 0;
     const paidAmount = booking.payment_status === 'Paid' ? booking.total_rental_price : advanceDeposit;
     const remainingAmount = booking.payment_status === 'Paid' ? 0 : Math.max(0, booking.total_rental_price - advanceDeposit);
@@ -239,7 +241,7 @@ export const generateReceipt = async (booking: Booking, unit: Unit | undefined, 
                 </p>
                 <p style="margin: 8px 0; display:flex; justify-content:space-between;">
                     <span style="color:#000000; font-weight: 600;">${labels.duration}:</span> 
-                    <span style="font-weight:bold; color: #111827;">${booking.nights} ${labels.nights}</span>
+                    <span style="font-weight:bold; color: #111827;">${monthly ? bookingPeriodLabel(booking, isRTL ? 'ar' : 'en') : `${booking.nights} ${labels.nights}`}</span>
                 </p>
                 <p style="margin: 8px 0; display:flex; justify-content:space-between;">
                     <span style="color:#000000; font-weight: 600;">${labels.checkIn}:</span> 
@@ -259,7 +261,7 @@ export const generateReceipt = async (booking: Booking, unit: Unit | undefined, 
             <tr>
                 <th style="text-align: ${isRTL ? 'right' : 'left'}; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.itemDesc}</th>
                 <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.rate}</th>
-                <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.qty}</th>
+                <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${monthly ? (isRTL ? 'عدد الشهور / السنين' : 'Months / Years') : labels.qty}</th>
                 <th style="text-align: ${isRTL ? 'left' : 'right'}; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.total}</th>
             </tr>
         </thead>
@@ -269,11 +271,11 @@ export const generateReceipt = async (booking: Booking, unit: Unit | undefined, 
                     <strong style="color: #000000;">${labels.baseRent}</strong>
                     <div style="font-size: 11px; color: #000000; margin-top: 2px; font-weight: 600;">${labels.baseRentDesc}</div>
                 </td>
-                <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: center; border-${isRTL ? 'left' : 'right'}: 1px solid #f1f5f9; color: #000000;">${booking.nightly_rate.toLocaleString()}</td>
-                <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: center; border-${isRTL ? 'left' : 'right'}: 1px solid #f1f5f9; color: #000000;">${booking.nights}</td>
+                <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: center; border-${isRTL ? 'left' : 'right'}: 1px solid #f1f5f9; color: #000000;">${(monthly ? periodRate(booking) : booking.nightly_rate).toLocaleString()}</td>
+                <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: center; border-${isRTL ? 'left' : 'right'}: 1px solid #f1f5f9; color: #000000;">${monthly ? periodCount(booking) : booking.nights}</td>
                 <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; text-align: ${isRTL ? 'left' : 'right'}; font-weight: 600; color: #000000;">${baseTotal.toLocaleString()}</td>
             </tr>
-            ${booking.village_fee > 0 ? `
+            ${!monthly && booking.village_fee > 0 ? `
             <tr>
                 <td style="padding: 16px; border-bottom: 1px solid #e2e8f0; border-${isRTL ? 'left' : 'right'}: 1px solid #f1f5f9;">
                     <strong style="color: #000000;">
@@ -497,10 +499,10 @@ export const generateOccupancyReport = async (
 
             const bookingRows = unitBookings.map(b => {
                 // Calculations per booking
-                const baseRent = b.nightly_rate;
-                const totalRent = b.nightly_rate * b.nights;
-                const fees = (b.village_fee || 0) * b.nights;
-                const deductedFees = b.fee_type === 'TENANT_PAYS' ? 0 : fees;
+                const baseRent = isMonthlyBooking(b) ? periodRate(b) : b.nightly_rate;
+                const totalRent = isMonthlyBooking(b) ? bookingRentTotal(b) : (b.nightly_rate * b.nights);
+                const fees = bookingVillageFees(b);
+                const deductedFees = bookingFeeDeduction(b);
                 const hk = b.housekeeping_enabled ? (b.housekeeping_price || 0) : 0;
                 const secDep = b.security_deposit_enabled ? (b.security_deposit || 0) : 0;
                 const grand = b.total_rental_price;
@@ -519,21 +521,23 @@ export const generateOccupancyReport = async (
                     unitGrand += grand;
                     unitRemaining += remaining;
                     unitSecDep += secDep;
-                    unitTotalNights += b.nights;
+                    unitTotalNights += bookingDays(b);
                 }
 
                 const statusColor = b.status === BookingStatus.CONFIRMED ? '#166534' : '#854d0e';
                 const statusBg = b.status === BookingStatus.CONFIRMED ? '#dcfce7' : '#fef9c3';
                 const payStatusBg = b.payment_status === 'Paid' ? '#dcfce7' : '#fee2e2';
                 const payStatusColor = b.payment_status === 'Paid' ? '#166534' : '#991b1b';
-                const sysTrans = b.fee_type === 'INCLUSIVE' ? (isRTL ? 'شامل الرسوم' : 'Inclusive') : (b.fee_type === 'TENANT_PAYS' ? (isRTL ? 'على المستأجر' : 'Tenant Pays') : (isRTL ? 'غير شامل' : 'Exclusive'));
+                const sysTrans = isMonthlyBooking(b)
+                    ? (isRTL ? 'إيجار بالشهر/السنة' : 'Monthly/Yearly')
+                    : (b.fee_type === 'INCLUSIVE' ? (isRTL ? 'شامل الرسوم' : 'Inclusive') : (b.fee_type === 'TENANT_PAYS' ? (isRTL ? 'على المستأجر' : 'Tenant Pays') : (isRTL ? 'غير شامل' : 'Exclusive')));
 
                 return `
             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ffffff;">
                 <td style="padding: 10px; font-weight: bold; color: #1e293b;">${b.tenant_name}</td>
                 <td style="padding: 10px; color: #475569; font-size: 11px;">${b.phone}</td>
                 <td style="padding: 10px; color: #334155; font-size: 11px;">${format(new Date(b.start_date), 'yyyy-MM-dd')}<br/>${format(new Date(b.end_date), 'yyyy-MM-dd')}</td>
-                <td style="padding: 10px; text-align: center; font-weight: bold; color: #0f172a;">${b.nights}</td>
+                <td style="padding: 10px; text-align: center; font-weight: bold; color: #0f172a;">${isMonthlyBooking(b) ? bookingPeriodLabel(b, isRTL ? 'ar' : 'en') : b.nights}</td>
                 <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: 600; color: #0284c7;">
                     ${baseRent.toLocaleString()}
                     <div style="font-size: 8px; font-weight: normal; color: #64748b; margin-top: 2px;">${sysTrans}</div>
@@ -759,16 +763,16 @@ export const generateVillageFeesReport = async (
             let unitTotalDays = 0;
 
             const rows = unitBookings.map(b => {
-                const fees = (b.village_fee || 0) * b.nights;
+                const fees = bookingVillageFees(b);
                 unitTotalFees += fees;
-                unitTotalDays += b.nights;
+                unitTotalDays += bookingDays(b);
 
                 return `
             <tr style="border-bottom: 1px solid #e2e8f0; background-color: #ffffff;">
-                <td style="padding: 10px; font-weight: bold; color: #1e293b;">${b.tenant_name}</td>
+                <td style="padding: 10px; font-weight: bold; color: #1e293b;">${b.tenant_name}${isMonthlyBooking(b) ? ` <span style="font-size:9px;color:#7c3aed;">(${bookingPeriodLabel(b, isRTL ? 'ar' : 'en')})</span>` : ''}</td>
                 <td style="padding: 10px; color: #334155; font-size: 11px;">${format(new Date(b.start_date), 'yyyy-MM-dd')} / ${format(new Date(b.end_date), 'yyyy-MM-dd')}</td>
-                <td style="padding: 10px; text-align: center; font-weight: bold; color: #000;">${b.nights}</td>
-                <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; color: #475569;">${b.village_fee || 0}</td>
+                <td style="padding: 10px; text-align: center; font-weight: bold; color: #000;">${bookingDays(b)}</td>
+                <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; color: #475569;">${isMonthlyBooking(b) ? fees.toLocaleString() : (b.village_fee || 0)}</td>
                 <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: bold; color: #d97706;">${fees.toLocaleString()}</td>
             </tr>
             `;

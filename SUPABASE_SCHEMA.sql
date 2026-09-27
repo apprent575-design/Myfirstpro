@@ -124,6 +124,10 @@ create table if not exists public.bookings (
   handler_enabled boolean default false,
   handler_name text,
   handler_phone text,
+  rental_mode text default 'nightly',   -- 'nightly' | 'monthly'
+  period_unit text default 'months',    -- 'months' | 'years'
+  period_count integer default 0,       -- عدد الشهور / السنين
+  period_rate numeric default 0,        -- سعر الشهر / السنة
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 

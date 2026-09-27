@@ -4,12 +4,13 @@ import { useApp } from '../context/AppContext';
 import { FilterPopover } from './FilterPopover';
 import { MultiSelectBookings } from './MultiSelectBookings';
 import { MultiSelectUnits } from './MultiSelectUnits';
-import { Booking, BookingStatus, PaymentStatus, FeeType } from '../types';
+import { Booking, BookingStatus, PaymentStatus, FeeType, PeriodUnit } from '../types';
 import { Plus, Edit2, Trash2, FileText, FileSignature, CheckCircle, Clock, XCircle, MessageCircle, Calendar, ThumbsUp, ThumbsDown, AlertTriangle, Loader2, Home, ChevronsRight, Phone } from 'lucide-react';
-import { format, addDays, isWithinInterval, isValid } from 'date-fns';
+import { format, addDays, addMonths, addYears, differenceInCalendarDays, isWithinInterval, isValid } from 'date-fns';
 import { generateReceipt } from '../utils/pdfGenerator';
 import { ContractModal } from './ContractModal';
 import { NumberInput } from './NumberInput';
+import { bookingFeeDeduction, bookingPeriodLabel, isMonthlyBooking } from '../utils/bookingMath';
 
 const numberFieldClass =
   'w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none';
@@ -107,35 +108,50 @@ export const Bookings = () => {
 
   // Auto Calculations
   useEffect(() => {
-    if (formData.start_date && formData.nights) {
-      // Use parseDate helper to avoid timezone issues with yyyy-MM-dd
-      const parsedDate = parseDate(formData.start_date);
+    if (!formData.start_date) return;
+    const parsedDate = parseDate(formData.start_date);
+    if (!isValid(parsedDate)) return;
 
-      // Prevent invalid date operations
-      if (!isValid(parsedDate)) return;
+    const housekeeping = formData.housekeeping_enabled ? Number(formData.housekeeping_price || 0) : 0;
 
-      const end = addDays(parsedDate, Number(formData.nights));
-
-      // Calculate Grand Total (Tenant Pays)
-      const base = Number(formData.nightly_rate || 0);
-      const fee = Number(formData.village_fee || 0);
-      const nights = Number(formData.nights || 0);
-      const housekeeping = formData.housekeeping_enabled ? Number(formData.housekeeping_price || 0) : 0;
-
-      let total = 0;
-      if (formData.fee_type === FeeType.EXCLUSIVE) {
-        total = ((base + fee) * nights) + housekeeping;
-      } else {
-        total = (base * nights) + housekeeping;
-      }
+    // نظام الشهر/السنة: الشهر شهر على الكالندر، ورسوم القرية مش بتدخل في الإجمالي خالص
+    if (formData.rental_mode === 'monthly') {
+      const count = Math.max(0, Number(formData.period_count || 0));
+      const unit: PeriodUnit = formData.period_unit === 'years' ? 'years' : 'months';
+      const end = count ? (unit === 'years' ? addYears(parsedDate, count) : addMonths(parsedDate, count)) : null;
+      const total = (Number(formData.period_rate || 0) * count) + housekeeping;
 
       setFormData(prev => ({
         ...prev,
-        end_date: isValid(end) ? format(end, 'yyyy-MM-dd') : prev.end_date,
+        end_date: end && isValid(end) ? format(end, 'yyyy-MM-dd') : prev.end_date,
+        nights: end && isValid(end) ? Math.max(0, differenceInCalendarDays(end, parsedDate)) : prev.nights,
         total_rental_price: total
       }));
+      return;
     }
-  }, [formData.start_date, formData.nights, formData.nightly_rate, formData.village_fee, formData.fee_type, formData.housekeeping_enabled, formData.housekeeping_price]);
+
+    if (!formData.nights) return;
+
+    const end = addDays(parsedDate, Number(formData.nights));
+
+    // Calculate Grand Total (Tenant Pays)
+    const base = Number(formData.nightly_rate || 0);
+    const fee = Number(formData.village_fee || 0);
+    const nights = Number(formData.nights || 0);
+
+    let total = 0;
+    if (formData.fee_type === FeeType.EXCLUSIVE) {
+      total = ((base + fee) * nights) + housekeeping;
+    } else {
+      total = (base * nights) + housekeeping;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      end_date: isValid(end) ? format(end, 'yyyy-MM-dd') : prev.end_date,
+      total_rental_price: total
+    }));
+  }, [formData.start_date, formData.rental_mode, formData.period_unit, formData.period_count, formData.period_rate, formData.nights, formData.nightly_rate, formData.village_fee, formData.fee_type, formData.housekeeping_enabled, formData.housekeeping_price]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,9 +164,25 @@ export const Bookings = () => {
       return;
     }
 
+    // نظام الشهر/السنة: لازم عدد المدة وسعرها
+    if (formData.rental_mode === 'monthly') {
+      if (!formData.period_count || Number(formData.period_count) < 1) {
+        setFormError(language === 'ar' ? 'اكتب عدد الشهور أو السنين.' : 'Enter the number of months / years.');
+        return;
+      }
+      if (!formData.period_rate || Number(formData.period_rate) <= 0) {
+        setFormError(language === 'ar' ? 'اكتب سعر الشهر أو السنة.' : 'Enter the monthly / yearly rate.');
+        return;
+      }
+    }
+
     // Construct payload
+    // الحجوزات العادية (بالليلة) مش بتبعت حقول النظام الشهري خالص، فالشغل بيفضل ماشي
+    // حتى لو أعمدة قاعدة البيانات الجديدة لسه ما اتعملتش.
+    const { rental_mode, period_unit, period_count, period_rate, ...restForm } = formData;
     const bookingPayload = {
-      ...formData,
+      ...restForm,
+      ...(rental_mode === 'monthly' ? { rental_mode, period_unit, period_count, period_rate } : {}),
       id: editingId || crypto.randomUUID(),
       // Preserve original creation date if editing, otherwise new date
       created_at: editingId
@@ -197,6 +229,10 @@ export const Bookings = () => {
       status: BookingStatus.PENDING,
       payment_status: PaymentStatus.UNPAID,
       fee_type: FeeType.EXCLUSIVE,
+      rental_mode: 'nightly',
+      period_unit: 'months',
+      period_count: 1,
+      period_rate: 0,
       notes: '',
       tenant_rating_good: true,
       handler_enabled: false,
@@ -231,6 +267,10 @@ export const Bookings = () => {
       handler_enabled: booking.handler_enabled || false,
       handler_name: booking.handler_name || '',
       handler_phone: booking.handler_phone || '',
+      rental_mode: booking.rental_mode || 'nightly',
+      period_unit: booking.period_unit || 'months',
+      period_count: booking.period_count || 1,
+      period_rate: booking.period_rate || 0,
     });
     setIsModalOpen(true);
   };
@@ -420,7 +460,7 @@ export const Bookings = () => {
                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                     <span>{unit?.name}</span>
                     <span>•</span>
-                    <span>{booking.nights} {t('nights')}</span>
+                    <span>{bookingPeriodLabel(booking, language === 'ar' ? 'ar' : 'en')}</span>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -455,7 +495,7 @@ export const Bookings = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <span className="block text-gray-400 text-[11px] mb-1">{isRTL ? 'صافي الربح' : 'Net Profit'}</span>
-                    <span className="font-bold text-green-600 dark:text-green-400">{(booking.total_rental_price || 0) - (booking.housekeeping_enabled ? booking.housekeeping_price || 0 : 0) - (booking.fee_type === FeeType.TENANT_PAYS ? 0 : ((booking.nights || 0) * (booking.village_fee || 0)))} {t('currency')}</span>
+                    <span className="font-bold text-green-600 dark:text-green-400">{(booking.total_rental_price || 0) - (booking.housekeeping_enabled ? booking.housekeeping_price || 0 : 0) - bookingFeeDeduction(booking)} {t('currency')}</span>
                   </div>
                   <div>
                     <span className="block text-gray-400 text-[11px] mb-1">{isRTL ? 'المبلغ المدفوع' : 'Paid Amount'}</span>
@@ -700,6 +740,36 @@ export const Bookings = () => {
                 </div>
               </div>
 
+              {/* نظام الإيجار: بالليلة أو بالشهر/السنة */}
+              <div className="space-y-2 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-slate-800/40">
+                <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                  {language === 'ar' ? 'نظام الإيجار' : 'Rental system'}
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, rental_mode: 'nightly' })}
+                    className={`flex-1 p-3 rounded-lg font-bold border-2 transition-all ${formData.rental_mode !== 'monthly' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-transparent bg-white dark:bg-slate-700 text-gray-500 hover:bg-gray-50'}`}
+                  >
+                    {language === 'ar' ? 'بالليلة (الليالي وسعر الليلة)' : 'Nightly'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, rental_mode: 'monthly', period_unit: formData.period_unit || 'months', period_count: formData.period_count || 1 })}
+                    className={`flex-1 p-3 rounded-lg font-bold border-2 transition-all ${formData.rental_mode === 'monthly' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-transparent bg-white dark:bg-slate-700 text-gray-500 hover:bg-gray-50'}`}
+                  >
+                    {language === 'ar' ? 'بالشهر / بالسنة' : 'Monthly / Yearly'}
+                  </button>
+                </div>
+                {formData.rental_mode === 'monthly' && (
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                    {language === 'ar'
+                      ? 'المدة بتتحسب بالشهر نفسه (مش 30 يوم): من 1/8 لمدة 3 شهور = 1/11 تلقائيًا. ورسوم القرية هنا بتتسجّل للتقرير بس من غير أي تأثير على صافي الربح.'
+                      : 'Duration uses calendar months (1/8 + 3 months = 1/11). Village fees are recorded for the report only.'}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-4">
                 {/* Check In Banner */}
                 <div className="p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl text-primary-700 dark:text-primary-300 flex justify-between items-center font-medium border border-primary-100 dark:border-primary-900/30">
@@ -741,7 +811,8 @@ export const Bookings = () => {
                 </div>
               </div>
 
-              {/* Fee Mode (Natively inject before Financials) */}
+              {/* Fee Mode (Natively inject before Financials) — للنظام بالليلة بس */}
+              {formData.rental_mode !== 'monthly' && (
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300">نظام رسوم القرية (Village Fees Mode)</label>
                 <div className="flex flex-col xl:flex-row gap-2">
@@ -768,8 +839,77 @@ export const Bookings = () => {
                   </button>
                 </div>
               </div>
+              )}
 
-              {/* Financials */}
+              {/* Financials — بالليلة أو بالشهر/السنة */}
+              {formData.rental_mode === 'monthly' ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      {language === 'ar' ? 'نوع المدة' : 'Period unit'}
+                    </label>
+                    <div className="flex gap-1.5 p-1 rounded-xl bg-gray-100 dark:bg-slate-800">
+                      {([{ value: 'months', label: language === 'ar' ? 'بالشهور' : 'Months' }, { value: 'years', label: language === 'ar' ? 'بالسنين' : 'Years' }] as { value: PeriodUnit; label: string }[]).map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, period_unit: option.value })}
+                          className={`flex-1 p-2 rounded-lg font-bold text-sm transition-all ${(formData.period_unit || 'months') === option.value ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      {formData.period_unit === 'years' ? (language === 'ar' ? 'عدد السنين' : 'Number of years') : (language === 'ar' ? 'عدد الشهور' : 'Number of months')}
+                    </label>
+                    <NumberInput
+                      min={1}
+                      allowDecimal={false}
+                      className={numberFieldClass}
+                      value={formData.period_count || 0}
+                      onChange={period_count => setFormData({ ...formData, period_count })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      {formData.period_unit === 'years' ? (language === 'ar' ? 'سعر السنة' : 'Yearly rate') : (language === 'ar' ? 'سعر الشهر' : 'Monthly rate')}
+                    </label>
+                    <NumberInput
+                      className={numberFieldClass}
+                      value={formData.period_rate || 0}
+                      onChange={period_rate => setFormData({ ...formData, period_rate })}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      {language === 'ar' ? 'رسوم القرية (للتسجيل في تقرير الرسوم فقط)' : 'Village fees (report only)'}
+                    </label>
+                    <NumberInput
+                      className={numberFieldClass}
+                      value={formData.village_fee || 0}
+                      onChange={village_fee => setFormData({ ...formData, village_fee })}
+                    />
+                    <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                      {language === 'ar'
+                        ? 'المبلغ ده مش بيتضاف على الإيجار ومش بيتخصم من صافي الربح — بيظهر بس في تقرير رسوم القرية.'
+                        : 'This amount does not affect the rent total or the net profit — it only shows in the village fees report.'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                      {language === 'ar' ? 'إجمالي الإيجار (تلقائي)' : 'Rent total (auto)'}
+                    </label>
+                    <input
+                      readOnly
+                      className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 font-bold text-primary-600"
+                      value={(formData.total_rental_price || 0).toLocaleString()}
+                    />
+                  </div>
+                </div>
+              ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('nightlyRate')}</label>
@@ -788,6 +928,7 @@ export const Bookings = () => {
                   />
                 </div>
               </div>
+              )}
 
               {/* Toggles */}
               <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
@@ -899,7 +1040,7 @@ export const Bookings = () => {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2 pt-4 border-t border-gray-700/50">
                   <div>
                     <span className="block text-gray-400 text-xs mb-1">{isRTL ? 'صافي الربح' : 'Net Profit'}</span>
-                    <span className="font-medium text-green-400">{(formData.total_rental_price || 0) - (formData.housekeeping_enabled ? formData.housekeeping_price || 0 : 0) - (formData.fee_type === FeeType.TENANT_PAYS ? 0 : ((formData.nights || 0) * (formData.village_fee || 0)))} {t('currency')}</span>
+                    <span className="font-medium text-green-400">{(formData.total_rental_price || 0) - (formData.housekeeping_enabled ? formData.housekeeping_price || 0 : 0) - bookingFeeDeduction(formData as Booking)} {t('currency')}</span>
                   </div>
                   <div>
                     <span className="block text-gray-400 text-xs mb-1">{isRTL ? 'المبلغ المدفوع' : 'Paid Amount'}</span>

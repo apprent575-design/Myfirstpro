@@ -126,7 +126,9 @@ const buildEmailTemplate = (title: string, headerColor: string, booking: any, un
                             <table width="100%" cellpadding="12" cellspacing="0" border="0" style="font-size: 15px;">
                                 <tr>
                                     <td style="color: #718096; width: 35%; border-bottom: 1px solid #f7fafc;">الوحدة</td>
-                                    <td style="color: #1a202c; font-weight: 600; border-bottom: 1px solid #f7fafc;">${unitName} <span style="color: #a0aec0; font-size: 13px; font-weight: normal; margin-right: 6px;">(${booking.nights} ليالي)</span></td>
+                                    <td style="color: #1a202c; font-weight: 600; border-bottom: 1px solid #f7fafc;">${unitName} <span style="color: #a0aec0; font-size: 13px; font-weight: normal; margin-right: 6px;">(${booking.rental_mode === 'monthly'
+                                        ? `${booking.period_count || 0} ${booking.period_unit === 'years' ? 'سنوات' : 'شهور'}`
+                                        : `${booking.nights} ليالي`})</span></td>
                                 </tr>
                                 <tr>
                                     <td style="color: #718096; border-bottom: 1px solid #f7fafc;">اسم العميل</td>
@@ -308,10 +310,14 @@ serve(async (req) => {
                 let html = "";
 
                 // Booking profit per fee type (same formula as the financial report):
+                // monthly -> total rent as recorded (village fee is report-only);
                 // INCLUSIVE -> (nightly rate - village fee) x nights; otherwise nightly rate x nights
-                const bookingProfit = booking.fee_type === 'INCLUSIVE'
-                    ? ((booking.nightly_rate || 0) - (booking.village_fee || 0)) * (booking.nights || 0)
-                    : (booking.nightly_rate || 0) * (booking.nights || 0);
+                const isMonthly = booking.rental_mode === 'monthly';
+                const bookingProfit = isMonthly
+                    ? ((booking.period_rate || 0) * (booking.period_count || 0))
+                    : (booking.fee_type === 'INCLUSIVE'
+                        ? ((booking.nightly_rate || 0) - (booking.village_fee || 0)) * (booking.nights || 0)
+                        : (booking.nightly_rate || 0) * (booking.nights || 0));
 
                 if (isCheckIn) {
                     subject = `تذكير بموعد دخول غداً: وحدة ${unitName} - Rental Manager`;
