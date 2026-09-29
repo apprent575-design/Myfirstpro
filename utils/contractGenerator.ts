@@ -77,6 +77,32 @@ const villageLabel = (name?: string) => {
 
 const tenantsLabel = (count: number) => (count > 1 ? 'المستأجرون' : 'المستأجر');
 
+// عدد الشهور الكلي في العقد (السنة = 12 شهر)
+const durationMonths = (c: RentalContract) => {
+  const value = Math.max(0, Math.floor(Number(c.duration_value) || 0));
+  if (c.duration_mode === 'months') return value;
+  if (c.duration_mode === 'years') return value * 12;
+  return 0;
+};
+
+// نص المدة في العقد: في النظام السنوي نوضّح إن السنة 12 شهر
+const durationText = (c: RentalContract) => {
+  const base = contractDurationLabel(c);
+  const months = durationMonths(c);
+  if (c.duration_mode === 'years' && months > 0) return `${base} (${months} شهرًا — والسنة 12 شهرًا)`;
+  return base;
+};
+
+// تفاصيل السداد الشهري: "قيمة الشهر كذا × عدد كذا شهرًا، ويُسدد شهريًا (شهرًا بشهره)"
+const monthlyPaymentText = (c: RentalContract) => {
+  const amount = Number(c.monthly_amount) || 0;
+  if (amount <= 0) return '';
+  const months = durationMonths(c);
+  const perMonth = `${amount.toLocaleString('en-US')} جنيهًا مصريًا`;
+  const base = `قيمة الشهر ${perMonth}${months > 0 ? ` × عدد ${months} شهرًا` : ''}`;
+  return c.monthly_payment ? `${base}، ويُسدد الإيجار شهريًا (شهرًا بشهره)` : base;
+};
+
 // هل قائمة المنقولات مفعّلة في العقد ده؟
 export const hasInventory = (c: RentalContract) =>
   Boolean(c.inventory_enabled) && (c.inventory?.length || 0) > 0;
@@ -100,16 +126,23 @@ export const CONTRACT_CLAUSES: {
   {
     title: 'البند الثاني (مدة الإيجار)',
     body: c =>
-      `تبدأ مدة الإيجار من يوم ${fmtDate(c.start_date)} وتنتهي في يوم ${fmtDate(c.end_date)}، ومقدارها ${contractDurationLabel(c)}، ` +
+      `تبدأ مدة الإيجار من يوم ${fmtDate(c.start_date)} وتنتهي في يوم ${fmtDate(c.end_date)}، ومقدارها ${durationText(c)}` +
+      `${monthlyPaymentText(c) ? `، ${monthlyPaymentText(c)}` : ''}، ` +
       `وتلتزم ${tenantsLabel(c.parties?.length || 1)} بإخلاء العين وتسليمها للمؤجر في نهاية هذه المدة دون الحاجة إلى تنبيه أو إنذار سابق.`,
   },
   {
     title: 'البند الثالث (القيمة الإيجارية والتأمين)',
-    body: c =>
-      `اتفق الطرفان على إجمالي قيمة إيجارية قدرها ${money(c.rent_amount)} عن كامل المدة، ` +
-      `${c.payment_terms || 'سُددت بالكامل عند توقيع العقد.'} كما سدد الطرف الثاني مبلغ وقدره ${money(c.deposit_amount)} ` +
-      `كـ تأمين تلفيات، يُرد بالكامل عند المغادرة بعد معاينة العين والتأكد من سلامة المحتويات المطابقة للقائمة المرفقة ` +
-      `وسداد أي استهلاكات للمرافق إن وُجدت.`,
+    body: c => {
+      const perMonth = Number(c.monthly_amount) || 0;
+      const months = durationMonths(c);
+      const basis = perMonth > 0 ? `، محسوبة على أساس قيمة الشهر ${money(perMonth)}${months > 0 ? ` × عدد ${months} شهرًا` : ''}` : '';
+      return (
+        `اتفق الطرفان على إجمالي قيمة إيجارية قدرها ${money(c.rent_amount)} عن كامل المدة${basis}، ` +
+        `${c.payment_terms || 'سُددت بالكامل عند توقيع العقد.'} كما سدد الطرف الثاني مبلغ وقدره ${money(c.deposit_amount)} ` +
+        `كـ تأمين تلفيات، يُرد بالكامل عند المغادرة بعد معاينة العين والتأكد من سلامة المحتويات المطابقة للقائمة المرفقة ` +
+        `وسداد أي استهلاكات للمرافق إن وُجدت.`
+      );
+    },
   },
   {
     title: 'البند الرابع (طبيعة الإقامة والأفراد)',
@@ -383,7 +416,7 @@ export const buildContractHtml = (contract: RentalContract): string => {
          <tr>${th('القرية', '150px')}${td(escapeHtml(villageLabel(contract.village_name)))}${th('المرحلة', '110px')}${td(
         escapeHtml(contract.unit_phase)
       )}</tr>
-         <tr>${th('مدة الإيجار', '150px')}${td(escapeHtml(contractDurationLabel(contract)))}${
+         <tr>${th('مدة الإيجار', '150px')}${td(escapeHtml(durationText(contract)))}${
         hasInventory(contract)
           ? `${th('عدد المنقولات', '110px')}${td(String(inventory.reduce((sum, s) => sum + (s.items?.length || 0), 0)))}`
           : `${th('تاريخ العقد', '110px')}${td(fmtDate(contract.contract_date))}`
@@ -391,6 +424,13 @@ export const buildContractHtml = (contract: RentalContract): string => {
          <tr>${th('بداية الإيجار', '150px')}${td(fmtDate(contract.start_date))}${th('نهاية الإيجار', '110px')}${td(
         fmtDate(contract.end_date)
       )}</tr>
+         ${
+           Number(contract.monthly_amount) > 0
+             ? `<tr>${th('قيمة الشهر', '150px')}${td(money(contract.monthly_amount))}${th('طريقة السداد', '110px')}${td(
+                 contract.monthly_payment ? 'شهريًا (شهرًا بشهره)' : 'دفعة واحدة'
+               )}</tr>`
+             : ''
+         }
        </table>`
     )}
 

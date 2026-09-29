@@ -202,6 +202,8 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   end_date: String(row?.end_date || '').slice(0, 10),
   duration_mode: normalizeDurationMode(row?.duration_mode),
   duration_value: Number(row?.duration_value) || legacyDurationValue(row),
+  monthly_amount: Number(row?.monthly_amount) || 0,
+  monthly_payment: Boolean(row?.monthly_payment),
   inventory: Array.isArray(row?.inventory) && row.inventory.length ? normalizeInventory(row.inventory) : buildDefaultInventory(),
   inventory_enabled: row?.inventory_enabled === undefined || row?.inventory_enabled === null ? true : Boolean(row.inventory_enabled),
   inventory_value: Number(row?.inventory_value) || 0,
@@ -276,9 +278,15 @@ export const buildContractDefaults = (
   existing: RentalContract[]
 ): RentalContract => {
   const today = new Date();
-  // الحجز بيتسجّل بالليالي — والعقد بيتكتب بالأيام (يوم لكل ليلة)
-  const durationMode: ContractDurationMode = 'days';
-  const durationValue = booking.nights || nightsBetween(booking.start_date, booking.end_date);
+  const monthly = booking.rental_mode === 'monthly';
+  const yearly = booking.period_unit === 'years';
+  const monthsCount = monthly ? (Number(booking.period_count) || 0) * (yearly ? 12 : 1) : 0;
+  // العقد بيمشي على نظام الإيجار: بالليلة (أيام) أو بالشهر/السنة
+  const durationMode: ContractDurationMode = monthly ? (yearly ? 'years' : 'months') : 'days';
+  const durationValue = monthly
+    ? (Number(booking.period_count) || 0)
+    : (booking.nights || nightsBetween(booking.start_date, booking.end_date));
+  const monthlyAmount = monthly ? (Number(booking.period_rate) || 0) : 0;
   return {
     id: newId(),
     user_id: user?.id,
@@ -302,13 +310,15 @@ export const buildContractDefaults = (
     end_date: contractEndDate(booking.start_date, durationMode, durationValue) || booking.end_date,
     duration_mode: durationMode,
     duration_value: durationValue,
+    monthly_amount: monthlyAmount,
+    monthly_payment: monthly,
     inventory: buildDefaultInventory(),
     inventory_enabled: true,
     inventory_value: 0,
-    rent_amount: booking.total_rental_price || 0,
+    rent_amount: monthly ? monthlyAmount * monthsCount : (booking.total_rental_price || 0),
     deposit_amount:
       (booking.security_deposit_enabled ? booking.security_deposit : booking.deposit_amount) || 0,
-    payment_terms: 'يُسدد كامل المبلغ عند التوقيع على هذا العقد.',
+    payment_terms: monthly ? 'يُسدد الإيجار شهريًا (شهرًا بشهره).' : 'يُسدد كامل المبلغ عند التوقيع على هذا العقد.',
     notes: booking.notes || '',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

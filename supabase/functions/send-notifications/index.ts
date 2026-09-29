@@ -310,11 +310,14 @@ serve(async (req) => {
                 let html = "";
 
                 // Booking profit per fee type (same formula as the financial report):
-                // monthly -> total rent as recorded (village fee is report-only);
+                // monthly -> monthly rate x months (a year = 12 months); village fee is report-only
                 // INCLUSIVE -> (nightly rate - village fee) x nights; otherwise nightly rate x nights
                 const isMonthly = booking.rental_mode === 'monthly';
+                const monthlyMonths = isMonthly
+                    ? (booking.period_count || 0) * (booking.period_unit === 'years' ? 12 : 1)
+                    : 0;
                 const bookingProfit = isMonthly
-                    ? ((booking.period_rate || 0) * (booking.period_count || 0))
+                    ? ((booking.period_rate || 0) * monthlyMonths)
                     : (booking.fee_type === 'INCLUSIVE'
                         ? ((booking.nightly_rate || 0) - (booking.village_fee || 0)) * (booking.nights || 0)
                         : (booking.nightly_rate || 0) * (booking.nights || 0));

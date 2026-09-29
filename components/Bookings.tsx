@@ -118,8 +118,10 @@ export const Bookings = () => {
     if (formData.rental_mode === 'monthly') {
       const count = Math.max(0, Number(formData.period_count || 0));
       const unit: PeriodUnit = formData.period_unit === 'years' ? 'years' : 'months';
+      const months = unit === 'years' ? count * 12 : count;
       const end = count ? (unit === 'years' ? addYears(parsedDate, count) : addMonths(parsedDate, count)) : null;
-      const total = (Number(formData.period_rate || 0) * count) + housekeeping;
+      // الإيجار = سعر الشهر × عدد الشهور (والسنة 12 شهر) — ورسوم القرية مش بتدخل في الإجمالي
+      const total = (Number(formData.period_rate || 0) * months) + housekeeping;
 
       setFormData(prev => ({
         ...prev,
@@ -152,6 +154,14 @@ export const Bookings = () => {
       total_rental_price: total
     }));
   }, [formData.start_date, formData.rental_mode, formData.period_unit, formData.period_count, formData.period_rate, formData.nights, formData.nightly_rate, formData.village_fee, formData.fee_type, formData.housekeeping_enabled, formData.housekeeping_price]);
+
+  // عدد شهور المدة في النظام الشهري (السنة = 12 شهر) — للعرض في الفورم
+  const formMonthsCount =
+    formData.rental_mode === 'monthly'
+      ? formData.period_unit === 'years'
+        ? (Number(formData.period_count) || 0) * 12
+        : Number(formData.period_count) || 0
+      : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -875,13 +885,18 @@ export const Bookings = () => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                      {formData.period_unit === 'years' ? (language === 'ar' ? 'سعر السنة' : 'Yearly rate') : (language === 'ar' ? 'سعر الشهر' : 'Monthly rate')}
+                      {language === 'ar' ? 'سعر الشهر' : 'Monthly rate'}
                     </label>
                     <NumberInput
                       className={numberFieldClass}
                       value={formData.period_rate || 0}
                       onChange={period_rate => setFormData({ ...formData, period_rate })}
                     />
+                    {formData.period_unit === 'years' && (
+                      <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                        {language === 'ar' ? 'السنة = 12 شهر × سعر الشهر' : 'A year = 12 months × monthly rate'}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
@@ -908,6 +923,11 @@ export const Bookings = () => {
                       value={(formData.total_rental_price || 0).toLocaleString()}
                     />
                   </div>
+                  <p className="md:col-span-3 text-[11px] font-bold text-primary-700 dark:text-primary-300 bg-primary-50/60 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-900/40 rounded-xl p-3">
+                    {language === 'ar'
+                      ? `المدة: ${formMonthsCount} شهرًا — الإيجار = سعر الشهر (${(formData.period_rate || 0).toLocaleString()}) × ${formMonthsCount} شهر، ويُسدد شهريًا (شهرًا بشهره).`
+                      : `Duration: ${formMonthsCount} months — rent = monthly rate × months, paid month by month.`}
+                  </p>
                 </div>
               ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

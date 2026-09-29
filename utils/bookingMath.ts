@@ -28,10 +28,17 @@ export const monthlyEndDate = (startIso: string, unit: PeriodUnit, count: number
   return isValid(end) ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}` : '';
 };
 
-// إجمالي الإيجار المسجّل في الحجز
+// إجمالي الإيجار المسجّل في الحجز = سعر الشهر × عدد الشهور (والسنة 12 شهر)
+// عدد الشهور الكلي للمدة (السنة = 12 شهر)
+export const bookingMonthsCount = (booking?: Booking | null): number => {
+  if (!booking || !isMonthlyBooking(booking)) return 0;
+  const count = periodCount(booking);
+  return periodUnitOf(booking) === 'years' ? count * 12 : count;
+};
+
 export const bookingRentTotal = (booking: Booking): number =>
   isMonthlyBooking(booking)
-    ? periodRate(booking) * periodCount(booking)
+    ? periodRate(booking) * bookingMonthsCount(booking)
     : (booking.nightly_rate || 0) * (booking.nights || 0);
 
 // رسوم القرية اللي بتظهر في تقرير رسوم القرية
@@ -73,10 +80,21 @@ export const bookingPeriodLabel = (booking: Booking, lang: 'ar' | 'en' = 'ar'): 
   return lang === 'en' ? `${booking.nights || 0} nights` : `${booking.nights || 0} ليالي`;
 };
 
-// سعر الوحدة في النظام الجديد (سعر الشهر/السنة) — للعرض في التقارير
+// سعر الوحدة في النظام الجديد: دايماً سعر الشهر (والسنة بتتحسب 12 شهر) — للعرض في التقارير
 export const bookingUnitRateLabel = (booking: Booking, lang: 'ar' | 'en' = 'ar'): string => {
   if (!isMonthlyBooking(booking)) return lang === 'en' ? 'Nightly rate' : 'سعر الليلة';
-  return periodUnitOf(booking) === 'years'
-    ? lang === 'en' ? 'Yearly rate' : 'سعر السنة'
-    : lang === 'en' ? 'Monthly rate' : 'سعر الشهر';
+  return lang === 'en' ? 'Monthly rate' : 'سعر الشهر';
+};
+
+// نص تفصيلي للمدة في النظام الشهري: "3 شهور" أو "سنتان (24 شهر)"
+export const bookingMonthsLabel = (booking: Booking, lang: 'ar' | 'en' = 'ar'): string => {
+  const months = bookingMonthsCount(booking);
+  const count = periodCount(booking);
+  const years = periodUnitOf(booking) === 'years';
+  if (lang === 'en') return years ? `${count} year(s) = ${months} months` : `${months} months`;
+  if (years) {
+    const y = count === 1 ? 'سنة واحدة' : count === 2 ? 'سنتان' : `${count} سنوات`;
+    return `${y} (${months} شهرًا) — والسنة 12 شهرًا`;
+  }
+  return months === 1 ? 'شهر واحد' : months === 2 ? 'شهران' : months >= 3 && months <= 10 ? `${months} شهور` : `${months} شهرًا`;
 };

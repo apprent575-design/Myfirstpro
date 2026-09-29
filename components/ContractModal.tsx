@@ -12,6 +12,7 @@ import {
   titlesForGender,
 } from '../utils/contractStore';
 import { createInventoryItem, createInventorySection } from '../utils/contractInventory';
+import { isMonthlyBooking } from '../utils/bookingMath';
 import { generateContractPdf } from '../utils/contractGenerator';
 import { NumberInput } from './NumberInput';
 import {
@@ -679,6 +680,46 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                   </span>
                 )}
               </div>
+
+              {/* السداد الشهري — للعقود اللي جاية من حجز بالشهر/السنة */}
+              {(isMonthlyBooking(booking) || draft.monthly_amount > 0) && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className={labelClass}>{isAr ? 'قيمة الشهر (ج.م)' : 'Monthly amount (EGP)'}</label>
+                    <NumberInput
+                      className={inputClass}
+                      value={draft.monthly_amount}
+                      onChange={monthly_amount => patch({ monthly_amount })}
+                    />
+                    {draft.duration_mode === 'years' && (
+                      <p className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                        {isAr ? 'السنة = 12 شهر × قيمة الشهر' : 'A year = 12 months × monthly amount'}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelClass}>{isAr ? 'طريقة السداد في العقد' : 'Payment method'}</label>
+                    <div className="flex gap-1.5 p-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => patch({ monthly_payment: true })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                          draft.monthly_payment ? 'bg-primary-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {isAr ? 'يُسدد شهريًا (شهرًا بشهره)' : 'Paid monthly'}
+                      </button>
+                      <button
+                        onClick={() => patch({ monthly_payment: false })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                          !draft.monthly_payment ? 'bg-primary-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {isAr ? 'دفعة واحدة' : 'One payment'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* قائمة المنقولات (ملحق العقد) */}
               <SectionTitle icon={<ClipboardList size={16} className="text-primary-500" />}>

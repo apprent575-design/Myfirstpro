@@ -187,6 +187,8 @@ export interface RentalContract {
   end_date: string;          // yyyy-MM-dd — محسوبة من تاريخ البداية + المدة
   duration_mode: ContractDurationMode;
   duration_value: number;    // عدد الأيام / الشهور / السنين
+  monthly_amount: number;    // قيمة الشهر (للعقود اللي بتتسدد شهريًا) — والسنة 12 شهر
+  monthly_payment: boolean;  // يُسدد الإيجار شهريًا (شهرًا بشهره)
   inventory: ContractInventorySection[];  // ملحق قائمة المنقولات
   inventory_enabled: boolean;             // تفعيل/إلغاء قائمة المنقولات في العقد
   inventory_value: number;   // قيمة المنقولات الإجمالية
