@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { format } from 'date-fns';
 import { arSA } from 'date-fns/locale';
-import { RentalContract, ContractInventorySection } from '../types';
+import { RentalContract, ContractInventorySection, ContractLandlord } from '../types';
 import { contractDurationLabel } from './contractStore';
 
 /* -------------------------------------------------------------------------
@@ -252,36 +252,44 @@ export const buildContractHtml = (contract: RentalContract): string => {
     `<section data-block="1" data-break="1" style="margin:0 0 14px;">${inner}</section>`;
 
   // ---------- توقيعات العقد الأساسي ----------
+  // كل طرف في سطر واحد: الاسم على اليمين والتوقيع جنبه على الشمال
+  const signatureRow = (label: string, name: string, note = '') =>
+    `<tr>
+       <td style="padding:4px 0;vertical-align:top;text-align:right;">${label}${escapeHtml(name || '.....................')}${
+      note ? `<div style="font-size:11px;font-weight:normal;color:#333;">${note}</div>` : ''
+    }</td>
+       <td style="padding:4px 0;vertical-align:top;width:44%;text-align:right;white-space:nowrap;">التوقيع: .....................</td>
+     </tr>`;
+
+  const signatureList = (rows: string) =>
+    `<table style="width:100%;border-collapse:collapse;font-size:12.5px;direction:rtl;">${rows}</table>`;
+
+  const landlordsSignatureCell =
+    `<div style="font-weight:bold;margin-bottom:8px;">الطرف الأول (${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>` +
+    signatureList(
+      (landlords.length ? landlords : [null])
+        .map((l: ContractLandlord | null, i: number) =>
+          signatureRow(`${landlords.length > 1 ? `(${i + 1}) ` : ''}الاسم: `, l?.name || '')
+        )
+        .join('')
+    );
+
   const tenantsSignatureCell =
-    `<div style="font-weight:bold;margin-bottom:10px;">الطرف الثاني (${tenantsLabel(parties.length)})</div>` +
-    parties
-      .map(
-        (p, i) =>
-          `<div style="margin-bottom:${i === parties.length - 1 ? '0' : '14'}px;">` +
-          `<div style="margin-bottom:4px;">${parties.length > 1 ? `(${i + 1}) ` : ''}الاسم: ${escapeHtml(partyNameWithTitle(p))}</div>` +
-          `<div>التوقيع: .....................</div></div>`
-      )
-      .join('');
+    `<div style="font-weight:bold;margin-bottom:8px;">الطرف الثاني (${tenantsLabel(parties.length)})</div>` +
+    signatureList(
+      (parties.length ? parties : [null])
+        .map((p: RentalContract['parties'][number] | null, i: number) =>
+          signatureRow(`${parties.length > 1 ? `(${i + 1}) ` : ''}الاسم: `, p ? partyNameWithTitle(p) : '')
+        )
+        .join('')
+    );
 
   const signatures = `
     <section data-block="1" style="margin:0 0 14px;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;direction:rtl;table-layout:fixed;">
         <tr>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:50%;">
-            <div style="font-weight:bold;margin-bottom:10px;">الطرف الأول (${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>
-            ${
-              landlords.length
-                ? landlords
-                    .map(
-                      (l, i) =>
-                        `<div style="margin-bottom:${i === landlords.length - 1 ? '0' : '10'}px;">` +
-                        `<div style="margin-bottom:4px;">${landlords.length > 1 ? `(${i + 1}) ` : ''}الاسم: ${escapeHtml(
-                          l.name
-                        )}</div><div>التوقيع: .....................</div></div>`
-                    )
-                    .join('')
-                : `<div style="margin-bottom:6px;">الاسم: .....................</div><div style="margin-top:22px;">التوقيع: .....................</div>`
-            }
+            ${landlordsSignatureCell}
           </td>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:50%;">
             ${tenantsSignatureCell}
@@ -289,14 +297,12 @@ export const buildContractHtml = (contract: RentalContract): string => {
         </tr>
         <tr>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;">
-            <div style="font-weight:bold;margin-bottom:14px;">شاهد أول</div>
-            <div style="margin-bottom:6px;">الاسم: .....................</div>
-            <div style="margin-top:22px;">التوقيع: .....................</div>
+            <div style="font-weight:bold;margin-bottom:8px;">شاهد أول</div>
+            ${signatureList(signatureRow('الاسم: ', ''))}
           </td>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;">
-            <div style="font-weight:bold;margin-bottom:14px;">شاهد ثاني</div>
-            <div style="margin-bottom:6px;">الاسم: .....................</div>
-            <div style="margin-top:22px;">التوقيع: .....................</div>
+            <div style="font-weight:bold;margin-bottom:8px;">شاهد ثاني</div>
+            ${signatureList(signatureRow('الاسم: ', ''))}
           </td>
         </tr>
       </table>
@@ -365,22 +371,33 @@ export const buildContractHtml = (contract: RentalContract): string => {
     `<table style="width:100%;border-collapse:collapse;font-size:12.5px;direction:rtl;table-layout:fixed;">
        <tr>
          <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:34%;">
-           <div style="font-weight:bold;margin-bottom:12px;">الطرف الأول (المسلّم/${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>
-           <div style="margin-bottom:6px;">الاسم: ${escapeHtml(landlordNames || '.....................')}</div>
-           <div style="margin-bottom:6px;">التوقيع: .....................</div>
-           <div>التاريخ: ${fmtDate(contract.contract_date)}</div>
+           <div style="font-weight:bold;margin-bottom:8px;">الطرف الأول (المسلّم/${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>
+           ${signatureList(
+             (landlords.length ? landlords : [null])
+               .map((l: ContractLandlord | null, i: number) =>
+                 signatureRow(`${landlords.length > 1 ? `(${i + 1}) ` : ''}الاسم: `, l?.name || '')
+               )
+               .join('')
+           )}
+           <div style="margin-top:6px;">التاريخ: ${fmtDate(contract.contract_date)}</div>
          </td>
          <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:33%;">
-           <div style="font-weight:bold;margin-bottom:12px;">الطرف الثاني (المستلم/المستأجر)</div>
-           <div style="margin-bottom:6px;">الاسم: ${escapeHtml(parties[0] ? partyNameWithTitle(parties[0]) : '')}</div>
-           <div style="margin-bottom:6px;">الرقم القومي: ${escapeHtml(parties[0]?.national_id || '')}</div>
-           <div>التوقيع: .....................</div>
+           <div style="font-weight:bold;margin-bottom:8px;">الطرف الثاني (المستلم/${tenantsLabel(parties.length)})</div>
+           ${signatureList(
+             (parties.length ? parties : [null])
+               .map((p: RentalContract['parties'][number] | null, i: number) =>
+                 signatureRow(
+                   `${parties.length > 1 ? `(${i + 1}) ` : ''}الاسم: `,
+                   p ? partyNameWithTitle(p) : '',
+                   i === 0 && p?.national_id ? `الرقم القومي: ${escapeHtml(p.national_id)}` : ''
+                 )
+               )
+               .join('')
+           )}
          </td>
          <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:33%;">
-           <div style="font-weight:bold;margin-bottom:12px;">الشاهد / المسؤول</div>
-           <div style="margin-bottom:6px;">الاسم: .....................</div>
-           <div style="margin-bottom:6px;">الصفة: .....................</div>
-           <div>التوقيع: .....................</div>
+           <div style="font-weight:bold;margin-bottom:8px;">الشاهد / المسؤول</div>
+           ${signatureList(signatureRow('الاسم: ', '', 'الصفة: .....................') + signatureRow('التاريخ: ', ''))}
          </td>
        </tr>
      </table>`
