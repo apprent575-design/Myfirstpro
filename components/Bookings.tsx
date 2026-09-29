@@ -900,7 +900,7 @@ export const Bookings = () => {
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                      {language === 'ar' ? 'رسوم القرية (للتسجيل في تقرير الرسوم فقط)' : 'Village fees (report only)'}
+                      {language === 'ar' ? 'رسوم القرية (بالشهر)' : 'Village fees (per month)'}
                     </label>
                     <NumberInput
                       className={numberFieldClass}
@@ -909,8 +909,8 @@ export const Bookings = () => {
                     />
                     <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
                       {language === 'ar'
-                        ? 'المبلغ ده مش بيتضاف على الإيجار ومش بيتخصم من صافي الربح — بيظهر بس في تقرير رسوم القرية.'
-                        : 'This amount does not affect the rent total or the net profit — it only shows in the village fees report.'}
+                        ? `رسوم الشهر × عدد الشهور (${formMonthsCount} شهرًا) = ${((formData.village_fee || 0) * formMonthsCount).toLocaleString()} — بتتسجّل لتقرير رسوم القرية بس، ومش بتتضاف على الإيجار ولا بتتخصم من صافي الربح.`
+                        : `Monthly fee × ${formMonthsCount} months = ${((formData.village_fee || 0) * formMonthsCount).toLocaleString()} — recorded for the village fees report only.`}
                     </p>
                   </div>
                   <div className="space-y-2">

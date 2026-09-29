@@ -772,7 +772,7 @@ export const generateVillageFeesReport = async (
                 <td style="padding: 10px; font-weight: bold; color: #1e293b;">${b.tenant_name}${isMonthlyBooking(b) ? ` <span style="font-size:9px;color:#7c3aed;">(${bookingPeriodLabel(b, isRTL ? 'ar' : 'en')})</span>` : ''}</td>
                 <td style="padding: 10px; color: #334155; font-size: 11px;">${format(new Date(b.start_date), 'yyyy-MM-dd')} / ${format(new Date(b.end_date), 'yyyy-MM-dd')}</td>
                 <td style="padding: 10px; text-align: center; font-weight: bold; color: #000;">${bookingDays(b)}</td>
-                <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; color: #475569;">${isMonthlyBooking(b) ? fees.toLocaleString() : (b.village_fee || 0)}</td>
+                <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; color: #475569;">${isMonthlyBooking(b) ? `${(b.village_fee || 0).toLocaleString()}${isRTL ? ' (بالشهر)' : ' /month'}` : (b.village_fee || 0)}</td>
                 <td style="padding: 10px; text-align: ${isRTL ? 'left' : 'right'}; font-weight: bold; color: #d97706;">${fees.toLocaleString()}</td>
             </tr>
             `;

@@ -103,6 +103,21 @@ const monthlyPaymentText = (c: RentalContract) => {
   return c.monthly_payment ? `${base}، ويُسدد الإيجار شهريًا (شهرًا بشهره)` : base;
 };
 
+// طريقة السداد في البند الثالث — لازم تتفق مع البند الثاني (مفيش تعارض بينهم)
+const paymentTermsText = (c: RentalContract) => {
+  const custom = (c.payment_terms || '').trim();
+  const conflicting = /(دفعة واحدة|دفعةً واحدة|بالكامل عند التوقيع|كامل المبلغ عند التوقيع|مقدمًا|مقدماً)/;
+  if (c.monthly_payment) {
+    const amount = Number(c.monthly_amount) || 0;
+    const extra = custom && !conflicting.test(custom) ? ` — ${custom.replace(/\.$/, '')}` : '';
+    return `ويُسدد الإيجار شهريًا (شهرًا بشهره)${
+      amount > 0 ? ' بواقع قيمة الشهر المذكورة أعلاه' : ''
+    }${extra}.`;
+  }
+  if (!custom) return 'سُددت بالكامل عند توقيع العقد.';
+  return custom.endsWith('.') ? custom : `${custom}.`;
+};
+
 // هل قائمة المنقولات مفعّلة في العقد ده؟
 export const hasInventory = (c: RentalContract) =>
   Boolean(c.inventory_enabled) && (c.inventory?.length || 0) > 0;
@@ -138,7 +153,7 @@ export const CONTRACT_CLAUSES: {
       const basis = perMonth > 0 ? `، محسوبة على أساس قيمة الشهر ${money(perMonth)}${months > 0 ? ` × عدد ${months} شهرًا` : ''}` : '';
       return (
         `اتفق الطرفان على إجمالي قيمة إيجارية قدرها ${money(c.rent_amount)} عن كامل المدة${basis}، ` +
-        `${c.payment_terms || 'سُددت بالكامل عند توقيع العقد.'} كما سدد الطرف الثاني مبلغ وقدره ${money(c.deposit_amount)} ` +
+        `${paymentTermsText(c)} كما سدد الطرف الثاني مبلغ وقدره ${money(c.deposit_amount)} ` +
         `كـ تأمين تلفيات، يُرد بالكامل عند المغادرة بعد معاينة العين والتأكد من سلامة المحتويات المطابقة للقائمة المرفقة ` +
         `وسداد أي استهلاكات للمرافق إن وُجدت.`
       );

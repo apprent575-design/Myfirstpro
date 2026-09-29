@@ -209,11 +209,24 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   inventory_value: Number(row?.inventory_value) || 0,
   rent_amount: Number(row?.rent_amount) || 0,
   deposit_amount: Number(row?.deposit_amount) || 0,
-  payment_terms: row?.payment_terms || '',
+  payment_terms: normalizePaymentTerms(row),
   notes: row?.notes || '',
   created_at: row?.created_at || new Date().toISOString(),
   updated_at: row?.updated_at || new Date().toISOString(),
 });
+
+// طريقة السداد لازم تتفق مع نظام الإيجار (شهري ↔ دفعة واحدة) — بنصلّح أي تعارض قديم
+const LUMP_SUM_DEFAULT = 'يُسدد كامل المبلغ عند التوقيع على هذا العقد.';
+const MONTHLY_DEFAULT = 'يُسدد الإيجار شهريًا (شهرًا بشهره).';
+const LUMP_SUM_PATTERN = /(دفعة واحدة|دفعةً واحدة|بالكامل عند التوقيع|كامل المبلغ عند التوقيع)/;
+const MONTHLY_PATTERN = /(شهريًا|شهرًا بشهره|شهر بشهره)/;
+
+const normalizePaymentTerms = (row: any): string => {
+  const terms = String(row?.payment_terms || '').trim();
+  const monthly = Boolean(row?.monthly_payment);
+  if (monthly) return !terms || LUMP_SUM_PATTERN.test(terms) ? MONTHLY_DEFAULT : terms;
+  return !terms || MONTHLY_PATTERN.test(terms) ? LUMP_SUM_DEFAULT : terms;
+};
 
 // ---------- البحث عن عقود نفس المستأجر ----------
 

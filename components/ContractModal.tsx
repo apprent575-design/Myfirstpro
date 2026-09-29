@@ -701,7 +701,16 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                     <label className={labelClass}>{isAr ? 'طريقة السداد في العقد' : 'Payment method'}</label>
                     <div className="flex gap-1.5 p-1 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700">
                       <button
-                        onClick={() => patch({ monthly_payment: true })}
+                        onClick={() =>
+                          patch({
+                            monthly_payment: true,
+                            payment_terms:
+                              !draft.payment_terms ||
+                              /(دفعة واحدة|دفعةً واحدة|بالكامل عند التوقيع|كامل المبلغ عند التوقيع)/.test(draft.payment_terms)
+                                ? 'يُسدد الإيجار شهريًا (شهرًا بشهره).'
+                                : draft.payment_terms,
+                          })
+                        }
                         className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                           draft.monthly_payment ? 'bg-primary-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
                         }`}
@@ -709,7 +718,16 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                         {isAr ? 'يُسدد شهريًا (شهرًا بشهره)' : 'Paid monthly'}
                       </button>
                       <button
-                        onClick={() => patch({ monthly_payment: false })}
+                        onClick={() =>
+                          patch({
+                            monthly_payment: false,
+                            payment_terms:
+                              !draft.payment_terms ||
+                              /(شهريًا|شهرًا بشهره|شهر بشهره)/.test(draft.payment_terms)
+                                ? 'يُسدد كامل المبلغ عند التوقيع على هذا العقد.'
+                                : draft.payment_terms,
+                          })
+                        }
                         className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                           !draft.monthly_payment ? 'bg-primary-600 text-white shadow' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
                         }`}

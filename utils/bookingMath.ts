@@ -41,12 +41,21 @@ export const bookingRentTotal = (booking: Booking): number =>
     ? periodRate(booking) * bookingMonthsCount(booking)
     : (booking.nightly_rate || 0) * (booking.nights || 0);
 
-// رسوم القرية اللي بتظهر في تقرير رسوم القرية
-// (في النظام الشهري المبلغ مكتوب مرة واحدة للمدة كلها)
+// رسوم القرية اللي بتظهر في تقرير رسوم القرية (للتسجيل بس — مش بتتخصم من الأرباح)
+// النظام الشهري/السنوي: المبلغ المكتوب هو رسوم **الشهر** وبيتضرب في عدد الشهور (السنة 12 شهر)
+// النظام العادي: سعر الليلة × عدد الليالي
 export const bookingVillageFees = (booking: Booking): number =>
   isMonthlyBooking(booking)
-    ? Number(booking.village_fee) || 0
+    ? (Number(booking.village_fee) || 0) * bookingMonthsCount(booking)
     : (booking.village_fee || 0) * (booking.nights || 0);
+
+// نص توضيحي لرسوم القرية في النظام الشهري
+export const villageFeesNote = (booking: Booking, lang: 'ar' | 'en' = 'ar'): string => {
+  if (!isMonthlyBooking(booking)) return '';
+  const months = bookingMonthsCount(booking);
+  if (!months) return '';
+  return lang === 'ar' ? `رسوم القرية بالشهر × ${months} شهرًا` : `monthly fee × ${months} months`;
+};
 
 // الرسوم اللي بتتخصم من صافي الربح — في النظام الشهري مفيش خصم خالص
 export const bookingFeeDeduction = (booking: Booking): number => {
