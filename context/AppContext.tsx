@@ -580,6 +580,12 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
   };
 
   // --- Rental contracts (عقود الإيجار) — stored in public.contracts ---
+  // عمود قاعدة البيانات اسمه landlord (jsonb) وبنخزّن فيه مصفوفة المؤجرين (طرف واحد أو أكثر)
+  const contractToRow = (contract: RentalContract) => {
+    const { landlords, ...rest } = contract;
+    return { ...rest, landlord: landlords };
+  };
+
   const addContract = async (contract: RentalContract) => {
     checkRestriction();
     if (!user) throw new Error("User not authenticated");
@@ -587,7 +593,7 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
     setContracts(prev => [saved, ...prev.filter(c => c.id !== saved.id)]); // Optimistic
     upsertContractCache(user.id, saved); // نسخة محلية تعمل بدون نت
     if (!supabase) return;
-    const { error } = await supabase.from('contracts').insert([saved]);
+    const { error } = await supabase.from('contracts').insert([contractToRow(saved)]);
     if (error) throw error;
   };
 
@@ -596,7 +602,7 @@ export const AppProvider = ({ children }: { children?: ReactNode }) => {
     setContracts(prev => prev.map(c => (c.id === saved.id ? saved : c))); // Optimistic
     upsertContractCache(user?.id || saved.user_id, saved);
     if (!supabase) return;
-    const { error } = await supabase.from('contracts').update(saved).eq('id', saved.id);
+    const { error } = await supabase.from('contracts').update(contractToRow(saved)).eq('id', saved.id);
     if (error) throw error;
   };
 

@@ -242,6 +242,9 @@ const inventoryTable = (
 
 export const buildContractHtml = (contract: RentalContract): string => {
   const parties = contract.parties?.length ? contract.parties : [];
+  // الطرف الأول: مؤجر واحد أو أكثر (default مؤجر واحد)
+  const landlords = (contract.landlords || []).filter(l => l && (l.name || l.national_id || l.phone || l.address));
+  const landlordNames = landlords.length ? landlords.map(l => l.name).filter(Boolean).join(' و ') : '';
   const inventory = contract.inventory || [];
   const block = (inner: string, extra = '') =>
     `<section data-block="1" style="margin:0 0 14px;${extra}">${inner}</section>`;
@@ -265,9 +268,20 @@ export const buildContractHtml = (contract: RentalContract): string => {
       <table style="width:100%;border-collapse:collapse;font-size:13px;direction:rtl;table-layout:fixed;">
         <tr>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:50%;">
-            <div style="font-weight:bold;margin-bottom:10px;">الطرف الأول (المؤجر)</div>
-            <div style="margin-bottom:6px;">الاسم: ${escapeHtml(contract.landlord?.name)}</div>
-            <div style="margin-top:22px;">التوقيع: .....................</div>
+            <div style="font-weight:bold;margin-bottom:10px;">الطرف الأول (${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>
+            ${
+              landlords.length
+                ? landlords
+                    .map(
+                      (l, i) =>
+                        `<div style="margin-bottom:${i === landlords.length - 1 ? '0' : '10'}px;">` +
+                        `<div style="margin-bottom:4px;">${landlords.length > 1 ? `(${i + 1}) ` : ''}الاسم: ${escapeHtml(
+                          l.name
+                        )}</div><div>التوقيع: .....................</div></div>`
+                    )
+                    .join('')
+                : `<div style="margin-bottom:6px;">الاسم: .....................</div><div style="margin-top:22px;">التوقيع: .....................</div>`
+            }
           </td>
           <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:50%;">
             ${tenantsSignatureCell}
@@ -351,8 +365,8 @@ export const buildContractHtml = (contract: RentalContract): string => {
     `<table style="width:100%;border-collapse:collapse;font-size:12.5px;direction:rtl;table-layout:fixed;">
        <tr>
          <td style="border:1px solid #000;padding:10px 12px;vertical-align:top;width:34%;">
-           <div style="font-weight:bold;margin-bottom:12px;">الطرف الأول (المسلّم/المؤجر)</div>
-           <div style="margin-bottom:6px;">الاسم: ${escapeHtml(contract.landlord?.name)}</div>
+           <div style="font-weight:bold;margin-bottom:12px;">الطرف الأول (المسلّم/${landlords.length > 1 ? 'المؤجرون' : 'المؤجر'})</div>
+           <div style="margin-bottom:6px;">الاسم: ${escapeHtml(landlordNames || '.....................')}</div>
            <div style="margin-bottom:6px;">التوقيع: .....................</div>
            <div>التاريخ: ${fmtDate(contract.contract_date)}</div>
          </td>
@@ -402,13 +416,29 @@ export const buildContractHtml = (contract: RentalContract): string => {
     )}
 
     ${block(
-      `<div style="font-weight:bold;font-size:15px;margin-bottom:6px;">أولًا: الطرف الأول (المؤجر)</div>
+      landlords.length > 1
+        ? `<div style="font-weight:bold;font-size:15px;margin-bottom:6px;">أولًا: الطرف الأول (المؤجرون)</div>
+       <table style="width:100%;border-collapse:collapse;font-size:12.5px;direction:rtl;table-layout:fixed;">
+         <tr>${th('م', '28px')}${th('الاسم', '20%')}${th('الرقم القومي', '18%')}${th('الجنسية', '11%')}${th(
+            'رقم الهاتف',
+            '16%'
+          )}${th('المقيم في')}</tr>
+         ${landlords
+           .map(
+             (l, i) =>
+               `<tr>${td(String(i + 1), 'text-align:center;')}${td(escapeHtml(l.name))}${td(
+                 escapeHtml(l.national_id)
+               )}${td(escapeHtml(l.nationality))}${td(escapeHtml(l.phone))}${td(escapeHtml(l.address))}</tr>`
+           )
+           .join('')}
+       </table>`
+        : `<div style="font-weight:bold;font-size:15px;margin-bottom:6px;">أولًا: الطرف الأول (المؤجر)</div>
        <table style="width:100%;border-collapse:collapse;font-size:13px;direction:rtl;">
-         <tr>${th('الاسم', '150px')}${td(escapeHtml(contract.landlord?.name))}</tr>
-         <tr>${th('الرقم القومي', '150px')}${td(escapeHtml(contract.landlord?.national_id))}</tr>
-         <tr>${th('الجنسية', '150px')}${td(escapeHtml(contract.landlord?.nationality))}</tr>
-         <tr>${th('رقم الهاتف', '150px')}${td(escapeHtml(contract.landlord?.phone))}</tr>
-         <tr>${th('المقيم في', '150px')}${td(escapeHtml(contract.landlord?.address))}</tr>
+         <tr>${th('الاسم', '150px')}${td(escapeHtml(landlords[0]?.name))}</tr>
+         <tr>${th('الرقم القومي', '150px')}${td(escapeHtml(landlords[0]?.national_id))}</tr>
+         <tr>${th('الجنسية', '150px')}${td(escapeHtml(landlords[0]?.nationality))}</tr>
+         <tr>${th('رقم الهاتف', '150px')}${td(escapeHtml(landlords[0]?.phone))}</tr>
+         <tr>${th('المقيم في', '150px')}${td(escapeHtml(landlords[0]?.address))}</tr>
        </table>`
     )}
 

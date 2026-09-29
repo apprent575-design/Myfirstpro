@@ -2,6 +2,7 @@ import { format, differenceInCalendarDays, addDays, addMonths, addYears, isSameD
 import {
   Booking,
   ContractDurationMode,
+  ContractLandlord,
   ContractParty,
   PartyGender,
   PartyTitle,
@@ -156,6 +157,34 @@ const legacyDurationValue = (row: any): number => {
 
 // ---------- تطبيع صفوف قاعدة البيانات ----------
 
+// الطرف الأول (المؤجرون): العقد القديم كان فيه مؤجر واحد (كائن)، والجديد فيه مصفوفة مؤجرين
+export const createLandlord = (overrides: Partial<ContractLandlord> = {}): ContractLandlord => ({
+  id: overrides.id || newId(),
+  name: overrides.name || '',
+  national_id: overrides.national_id || '',
+  nationality: overrides.nationality || 'مصري',
+  phone: overrides.phone || '',
+  address: overrides.address || '',
+});
+
+const normalizeLandlords = (row: any): ContractLandlord[] => {
+  const raw = row?.landlords ?? row?.landlord;
+  const list: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const cleaned = list
+    .map(l =>
+      createLandlord({
+        id: l?.id,
+        name: l?.name || '',
+        national_id: l?.national_id || '',
+        nationality: l?.nationality || 'مصري',
+        phone: l?.phone || '',
+        address: l?.address || '',
+      })
+    )
+    .filter(l => l.name || l.national_id || l.phone);
+  return cleaned.length ? cleaned : [createLandlord()];
+};
+
 export const createParty = (overrides: Partial<ContractParty> = {}): ContractParty => {
   const gender: PartyGender = overrides.gender === 'female' ? 'female' : 'male';
   return {
@@ -175,13 +204,7 @@ export const normalizeContractRow = (row: any): RentalContract => ({
   unit_id: row?.unit_id || undefined,
   number: row?.number || '',
   contract_date: String(row?.contract_date || '').slice(0, 10),
-  landlord: {
-    name: row?.landlord?.name || '',
-    national_id: row?.landlord?.national_id || '',
-    nationality: row?.landlord?.nationality || '',
-    phone: row?.landlord?.phone || '',
-    address: row?.landlord?.address || '',
-  },
+  landlords: normalizeLandlords(row),
   parties: Array.isArray(row?.parties)
     ? row.parties.map((p: any) =>
         createParty({
@@ -307,13 +330,15 @@ export const buildContractDefaults = (
     unit_id: booking.unit_id,
     number: nextContractNumber(existing, today),
     contract_date: format(today, 'yyyy-MM-dd'),
-    landlord: {
-      name: user?.full_name || '',
-      national_id: '',
-      nationality: 'مصري',
-      phone: user?.phone || '',
-      address: '',
-    },
+    landlords: [
+      createLandlord({
+        name: user?.full_name || '',
+        national_id: '',
+        nationality: 'مصري',
+        phone: user?.phone || '',
+        address: '',
+      }),
+    ],
     parties: [createParty({ name: booking.tenant_name, phone: booking.phone })],
     unit_name: unit?.name || '',
     unit_type: unit?.type || '',

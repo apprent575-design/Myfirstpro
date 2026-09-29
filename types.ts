@@ -141,6 +141,7 @@ export interface ContractParty {
 }
 
 export interface ContractLandlord {
+  id: string;
   name: string;
   national_id: string;
   nationality: string;
@@ -177,7 +178,7 @@ export interface RentalContract {
   unit_id?: string;
   number: string;            // contract reference, auto from the date + sequence, editable
   contract_date: string;     // yyyy-MM-dd — auto = today, editable
-  landlord: ContractLandlord;
+  landlords: ContractLandlord[];  // الطرف الأول (المؤجرون) — 1 or more owners
   parties: ContractParty[];  // الطرف الثاني — 1 or more tenants
   unit_name: string;
   unit_type: string;

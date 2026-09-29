@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Booking, ContractDurationMode, ContractInventoryItem, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
+import { Booking, ContractDurationMode, ContractInventoryItem, ContractLandlord, ContractParty, PartyGender, PartyTitle, RentalContract, Unit } from '../types';
 import {
   buildContractDefaults,
   contractDurationLabel,
   contractEndDate,
   contractsForTenant,
+  createLandlord,
   createParty,
   newId,
   titleForGender,
@@ -92,8 +93,19 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
   const patch = (updates: Partial<RentalContract>) =>
     setDraft(prev => (prev ? { ...prev, ...updates } : prev));
 
-  const patchLandlord = (updates: Partial<RentalContract['landlord']>) =>
-    setDraft(prev => (prev ? { ...prev, landlord: { ...prev.landlord, ...updates } } : prev));
+  // ---------- الطرف الأول (المؤجرون) — مؤجر واحد افتراضيًا وتقدر تزوّد ----------
+  const patchLandlord = (id: string, updates: Partial<ContractLandlord>) =>
+    setDraft(prev =>
+      prev ? { ...prev, landlords: prev.landlords.map(l => (l.id === id ? { ...l, ...updates } : l)) } : prev
+    );
+
+  const addLandlord = () =>
+    setDraft(prev => (prev ? { ...prev, landlords: [...prev.landlords, createLandlord({ nationality: 'مصري' })] } : prev));
+
+  const removeLandlord = (id: string) =>
+    setDraft(prev =>
+      prev && prev.landlords.length > 1 ? { ...prev, landlords: prev.landlords.filter(l => l.id !== id) } : prev
+    );
 
   const patchParty = (id: string, updates: Partial<ContractParty>) =>
     setDraft(prev =>
@@ -453,44 +465,88 @@ export const ContractModal = ({ booking, unit, onClose }: ContractModalProps) =>
                 </div>
               </div>
 
-              {/* Landlord */}
+              {/* Landlords — الطرف الأول (مؤجر واحد افتراضيًا وتقدر تزوّد مؤجرين) */}
               <SectionTitle icon={<Users size={16} className="text-primary-500" />}>
-                {isAr ? 'الطرف الأول (المؤجر)' : 'First party (landlord)'}
+                {isAr
+                  ? `الطرف الأول (المؤجرون) — ${draft.landlords.length}`
+                  : `First party (landlords) — ${draft.landlords.length}`}
               </SectionTitle>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>{isAr ? 'الاسم' : 'Name'}</label>
-                  <input className={inputClass} value={draft.landlord.name} onChange={e => patchLandlord({ name: e.target.value })} />
-                </div>
-                <div>
-                  <label className={labelClass}>{isAr ? 'الرقم القومي' : 'National ID'}</label>
-                  <input
-                    className={inputClass}
-                    dir="ltr"
-                    inputMode="numeric"
-                    maxLength={14}
-                    value={draft.landlord.national_id}
-                    onChange={e => patchLandlord({ national_id: e.target.value.replace(/\D/g, '') })}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>{isAr ? 'الجنسية' : 'Nationality'}</label>
-                  <input className={inputClass} value={draft.landlord.nationality} onChange={e => patchLandlord({ nationality: e.target.value })} />
-                </div>
-                <div>
-                  <label className={labelClass}>{isAr ? 'رقم الهاتف' : 'Phone'}</label>
-                  <input
-                    className={inputClass}
-                    dir="ltr"
-                    inputMode="tel"
-                    value={draft.landlord.phone}
-                    onChange={e => patchLandlord({ phone: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>{isAr ? 'العنوان' : 'Address'}</label>
-                  <input className={inputClass} value={draft.landlord.address} onChange={e => patchLandlord({ address: e.target.value })} />
-                </div>
+
+              <div className="space-y-3">
+                {draft.landlords.map((landlord, index) => (
+                  <div key={landlord.id} className="p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-gray-50/60 dark:bg-slate-800/40">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-xs font-black text-gray-700 dark:text-gray-200">
+                        {isAr ? `المؤجر ${index + 1}` : `Landlord ${index + 1}`}
+                      </span>
+                      {draft.landlords.length > 1 && (
+                        <button
+                          onClick={() => removeLandlord(landlord.id)}
+                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          title={isAr ? 'مسح المؤجر' : 'Remove landlord'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>{isAr ? 'الاسم' : 'Name'}</label>
+                        <input
+                          className={inputClass}
+                          value={landlord.name}
+                          onChange={e => patchLandlord(landlord.id, { name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>{isAr ? 'الرقم القومي' : 'National ID'}</label>
+                        <input
+                          className={inputClass}
+                          dir="ltr"
+                          inputMode="numeric"
+                          maxLength={14}
+                          value={landlord.national_id}
+                          onChange={e => patchLandlord(landlord.id, { national_id: e.target.value.replace(/\D/g, '') })}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>{isAr ? 'الجنسية' : 'Nationality'}</label>
+                        <input
+                          className={inputClass}
+                          value={landlord.nationality}
+                          onChange={e => patchLandlord(landlord.id, { nationality: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>{isAr ? 'رقم الهاتف' : 'Phone'}</label>
+                        <input
+                          className={inputClass}
+                          dir="ltr"
+                          inputMode="tel"
+                          value={landlord.phone}
+                          onChange={e => patchLandlord(landlord.id, { phone: e.target.value })}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className={labelClass}>{isAr ? 'العنوان' : 'Address'}</label>
+                        <input
+                          className={inputClass}
+                          value={landlord.address}
+                          onChange={e => patchLandlord(landlord.id, { address: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  onClick={addLandlord}
+                  className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 hover:border-primary-400 hover:text-primary-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus size={16} />
+                  {isAr ? 'إضافة مؤجر آخر (مالك إضافي)' : 'Add another landlord'}
+                </button>
               </div>
 
               {/* Tenants */}
