@@ -260,7 +260,7 @@ export const generateReceipt = async (booking: Booking, unit: Unit | undefined, 
         <thead style="background-color: #f1f1f1;">
             <tr>
                 <th style="text-align: ${isRTL ? 'right' : 'left'}; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.itemDesc}</th>
-                <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.rate}</th>
+                <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${monthly ? (isRTL ? 'السعر (شهري)' : 'Rate (Monthly)') : labels.rate}</th>
                 <th style="text-align: center; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${monthly ? (isRTL ? 'عدد الشهور / السنين' : 'Months / Years') : labels.qty}</th>
                 <th style="text-align: ${isRTL ? 'left' : 'right'}; padding: 16px; color: #000000; font-weight: 800; text-transform: uppercase; font-size: 12px;">${labels.total}</th>
             </tr>
@@ -1151,7 +1151,9 @@ export const generateFinancialReport = async (
 
     // Owner profit per booking based on fee type:
     // TENANT_PAYS / EXCLUSIVE -> base nightly rate as written; INCLUSIVE -> nightly rate minus daily village fee
+    // النظام الشهري/السنوي: الربح = سعر الشهر × عدد الشهور (مفيش ليالي ولا خصم رسوم قرية)
     const bookingProfitOf = (b: Booking) => {
+        if (isMonthlyBooking(b)) return bookingRentTotal(b);
         const nightly = b.fee_type === FeeType.INCLUSIVE
             ? (b.nightly_rate || 0) - (b.village_fee || 0)
             : (b.nightly_rate || 0);

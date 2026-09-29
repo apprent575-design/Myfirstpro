@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { FilterPopover } from './FilterPopover';
@@ -10,7 +10,7 @@ import { format, addDays, addMonths, addYears, differenceInCalendarDays, isWithi
 import { generateReceipt } from '../utils/pdfGenerator';
 import { ContractModal } from './ContractModal';
 import { NumberInput } from './NumberInput';
-import { bookingFeeDeduction, bookingPeriodLabel, isMonthlyBooking } from '../utils/bookingMath';
+import { bookingFeeDeduction, bookingPeriodLabel, isMonthlyBooking, periodRate } from '../utils/bookingMath';
 
 const numberFieldClass =
   'w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none';
@@ -490,12 +490,22 @@ export const Bookings = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="block text-gray-400 text-xs mb-1">{t('nightlyRate')}</span>
-                    <span className="font-medium dark:text-gray-200">{booking.fee_type === FeeType.INCLUSIVE ? (booking.nightly_rate || 0) - (booking.village_fee || 0) : (booking.nightly_rate || 0)} {t('currency')}</span>
+                    <span className="block text-gray-400 text-xs mb-1">
+                      {isMonthlyBooking(booking) ? (isRTL ? 'سعر الشهر' : 'Monthly rate') : t('nightlyRate')}
+                    </span>
+                    <span className="font-medium dark:text-gray-200">
+                      {isMonthlyBooking(booking)
+                        ? periodRate(booking)
+                        : (booking.fee_type === FeeType.INCLUSIVE ? (booking.nightly_rate || 0) - (booking.village_fee || 0) : (booking.nightly_rate || 0))} {t('currency')}
+                    </span>
                   </div>
                   <div>
-                    <span className="block text-gray-400 text-xs mb-1">{t('dailyTotal')} (+Fees)</span>
-                    <span className="font-medium text-orange-600 dark:text-orange-400">{dailyTotal} {t('currency')}</span>
+                    <span className="block text-gray-400 text-xs mb-1">
+                      {isMonthlyBooking(booking) ? (isRTL ? 'رسوم القرية (بالشهر)' : 'Village fees (per month)') : `${t('dailyTotal')} (+Fees)`}
+                    </span>
+                    <span className="font-medium text-orange-600 dark:text-orange-400">
+                      {isMonthlyBooking(booking) ? (booking.village_fee || 0) : dailyTotal} {t('currency')}
+                    </span>
                   </div>
                   <div>
                     <span className="block text-gray-400 text-xs mb-1">{t('grandTotal')}</span>
@@ -723,34 +733,7 @@ export const Bookings = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Unit Select */}
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('unit')}</label>
-                  <select
-                    className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.unit_id}
-                    onChange={e => setFormData({ ...formData, unit_id: e.target.value })}
-                  >
-                    {state.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </select>
-                </div>
-
-                {/* Nights */}
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('nights')}</label>
-                  <NumberInput
-                    required
-                    min={1}
-                    allowDecimal={false}
-                    className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={formData.nights || 0}
-                    onChange={nights => setFormData({ ...formData, nights })}
-                  />
-                </div>
-              </div>
-
-              {/* نظام الإيجار: بالليلة أو بالشهر/السنة */}
+              {/* نظام الإيجار: بالليلة أو بالشهر/السنة — بنختاره الأول عشان الفورم يتغيّر على أساسه */}
               <div className="space-y-2 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-slate-800/40">
                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
                   {language === 'ar' ? 'نظام الإيجار' : 'Rental system'}
@@ -777,6 +760,84 @@ export const Bookings = () => {
                       ? 'المدة بتتحسب بالشهر نفسه (مش 30 يوم): من 1/8 لمدة 3 شهور = 1/11 تلقائيًا. ورسوم القرية هنا بتتسجّل للتقرير بس من غير أي تأثير على صافي الربح.'
                       : 'Duration uses calendar months (1/8 + 3 months = 1/11). Village fees are recorded for the report only.'}
                   </p>
+                )}
+              </div>
+
+              <div className={`grid grid-cols-1 ${formData.rental_mode === 'monthly' ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
+                {/* Unit Select */}
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('unit')}</label>
+                  <select
+                    className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
+                    value={formData.unit_id}
+                    onChange={e => setFormData({ ...formData, unit_id: e.target.value })}
+                  >
+                    {state.units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+
+                {formData.rental_mode === 'monthly' ? (
+                  <>
+                    {/* نظام الشهور/السنين: عدد الشهور بدل عدد الليالي */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                        {formData.period_unit === 'years'
+                          ? (language === 'ar' ? 'عدد السنين' : 'Number of years')
+                          : (language === 'ar' ? 'عدد الشهور' : 'Number of months')}
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="flex gap-1 p-1 rounded-xl bg-gray-100 dark:bg-slate-800 shrink-0">
+                          {([{ value: 'months', label: language === 'ar' ? 'شهور' : 'Months' }, { value: 'years', label: language === 'ar' ? 'سنين' : 'Years' }] as { value: PeriodUnit; label: string }[]).map(option => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setFormData({ ...formData, period_unit: option.value })}
+                              className={`px-3 rounded-lg font-bold text-sm transition-all ${(formData.period_unit || 'months') === option.value ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <NumberInput
+                          min={1}
+                          allowDecimal={false}
+                          className="flex-1 p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
+                          value={formData.period_count || 0}
+                          onChange={period_count => setFormData({ ...formData, period_count })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* سعر الشهر نفسه (والسنة 12 شهر) */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                        {language === 'ar' ? 'سعر الشهر' : 'Monthly rate'}
+                      </label>
+                      <NumberInput
+                        className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
+                        value={formData.period_rate || 0}
+                        onChange={period_rate => setFormData({ ...formData, period_rate })}
+                      />
+                      {formData.period_unit === 'years' && (
+                        <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                          {language === 'ar' ? 'السنة = 12 شهر × سعر الشهر' : 'A year = 12 months × monthly rate'}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  /* Nights — النظام بالليلة بس */
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">{t('nights')}</label>
+                    <NumberInput
+                      required
+                      min={1}
+                      allowDecimal={false}
+                      className="w-full p-4 rounded-xl border bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-gray-700 focus:ring-2 focus:ring-primary-500 outline-none"
+                      value={formData.nights || 0}
+                      onChange={nights => setFormData({ ...formData, nights })}
+                    />
+                  </div>
                 )}
               </div>
 
@@ -854,50 +915,6 @@ export const Bookings = () => {
               {/* Financials — بالليلة أو بالشهر/السنة */}
               {formData.rental_mode === 'monthly' ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                      {language === 'ar' ? 'نوع المدة' : 'Period unit'}
-                    </label>
-                    <div className="flex gap-1.5 p-1 rounded-xl bg-gray-100 dark:bg-slate-800">
-                      {([{ value: 'months', label: language === 'ar' ? 'بالشهور' : 'Months' }, { value: 'years', label: language === 'ar' ? 'بالسنين' : 'Years' }] as { value: PeriodUnit; label: string }[]).map(option => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, period_unit: option.value })}
-                          className={`flex-1 p-2 rounded-lg font-bold text-sm transition-all ${(formData.period_unit || 'months') === option.value ? 'bg-white dark:bg-slate-600 shadow text-primary-600 dark:text-white' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                      {formData.period_unit === 'years' ? (language === 'ar' ? 'عدد السنين' : 'Number of years') : (language === 'ar' ? 'عدد الشهور' : 'Number of months')}
-                    </label>
-                    <NumberInput
-                      min={1}
-                      allowDecimal={false}
-                      className={numberFieldClass}
-                      value={formData.period_count || 0}
-                      onChange={period_count => setFormData({ ...formData, period_count })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                      {language === 'ar' ? 'سعر الشهر' : 'Monthly rate'}
-                    </label>
-                    <NumberInput
-                      className={numberFieldClass}
-                      value={formData.period_rate || 0}
-                      onChange={period_rate => setFormData({ ...formData, period_rate })}
-                    />
-                    {formData.period_unit === 'years' && (
-                      <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                        {language === 'ar' ? 'السنة = 12 شهر × سعر الشهر' : 'A year = 12 months × monthly rate'}
-                      </p>
-                    )}
-                  </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-bold text-gray-700 dark:text-gray-300">
                       {language === 'ar' ? 'رسوم القرية (بالشهر)' : 'Village fees (per month)'}
@@ -1051,9 +1068,15 @@ export const Bookings = () => {
                 </div>
 
                 <div className="flex justify-between items-center mt-2 p-3 bg-gray-800 rounded-xl border border-gray-700">
-                  <span className="font-bold text-gray-300">{language === 'ar' ? 'ربح اليوم' : 'Daily Profit'}</span>
+                  <span className="font-bold text-gray-300">
+                    {formData.rental_mode === 'monthly'
+                      ? (language === 'ar' ? 'ربح الشهر' : 'Monthly profit')
+                      : (language === 'ar' ? 'ربح اليوم' : 'Daily Profit')}
+                  </span>
                   <span className="font-bold text-xl text-green-400">
-                    {formData.fee_type === FeeType.INCLUSIVE ? (formData.nightly_rate || 0) - (formData.village_fee || 0) : (formData.nightly_rate || 0)} {t('currency')}
+                    {formData.rental_mode === 'monthly'
+                      ? (formData.period_rate || 0)
+                      : (formData.fee_type === FeeType.INCLUSIVE ? (formData.nightly_rate || 0) - (formData.village_fee || 0) : (formData.nightly_rate || 0))} {t('currency')}
                   </span>
                 </div>
 
